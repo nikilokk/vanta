@@ -21,6 +21,11 @@ from tools import (
     get_running_processes,
     close_program,
     get_uptime,
+    get_clipboard,
+    set_clipboard,
+    set_volume,
+    toggle_mute,
+    media_control,
 )
 
 current_year = datetime.now().year
@@ -47,6 +52,75 @@ SYSTEM_PROMPT = f"""Ты Vanta — локальный AI-ассистент, у�
 MODEL = "qwen3:8b"
 
 TOOLS = [
+
+    {
+        "type": "function",
+        "function": {
+            "name": "get_clipboard",
+            "description": "Reads current text from the Windows clipboard.",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_clipboard",
+            "description": "Copies specified text to the Windows clipboard.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "Text to copy."
+                    }
+                },
+                "required": ["text"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_volume",
+            "description": "Sets master system volume level in percent (0-100).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "level": {
+                        "type": "integer",
+                        "description": "Volume level percentage (0-100)."
+                    }
+                },
+                "required": ["level"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "toggle_mute",
+            "description": "Toggles master audio mute state.",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_control",
+            "description": "Controls system media playback (play_pause, next, prev).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["play_pause", "next", "prev"],
+                        "description": "Media action: play_pause, next, or prev."
+                    }
+                },
+                "required": ["action"]
+            }
+        }
+    },
     {
         "type": "function",
         "function": {
@@ -334,6 +408,16 @@ def execute_tool(name, arguments):
         return run_command(**arguments)
     if name == "get_uptime":
         return get_uptime()
+    if name == "get_clipboard":
+        return get_clipboard()
+    if name == "set_clipboard":
+        return set_clipboard(**arguments)
+    if name == "set_volume":
+        return set_volume(**arguments)
+    if name == "toggle_mute":
+        return toggle_mute()
+    if name == "media_control":
+        return media_control(**arguments)
 
     return {"error": f"Unknown tool: {name}"}
 
@@ -391,13 +475,13 @@ def ask_ai(message):
 
             # ИСПРАВЛЕННАЯ ПРОВЕРКА ОПАСНЫХ ОПЕРАЦИЙ (без лишнего вложенного цикла)
             if name in DANGEROUS_TOOLS:
-                print(f"\n⚠️  [ВНИМАНИЕ] ИИ хочет выполнить: {name}({arguments})")
-                confirm = input("Разрешить? [y/N]: ").strip().lower()
-                if confirm not in {"y", "yes", "да", "д"}:
-                    result = {"success": False, "error": "Пользователь отклонил выполнение операции."}
+                print(f"\n⚠️  [WARNING] AI requested execution: {name}({arguments})")
+                confirm = input("Allow execution? [y/N]: ").strip().lower()
+                if confirm not in {"y", "yes"}:
+                    result = {"success": False, "error": "Operation rejected by user."}
                     print(f"[RESULT] {result}")
                     messages.append({"role": "tool", "content": json.dumps(result, ensure_ascii=False)})
-                    continue  # Пропускаем выполнение execute_tool для ЭТОЙ команды
+                    continue
 
             # Выполнение инструмента
             try:

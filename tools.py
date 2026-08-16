@@ -4,6 +4,10 @@ import time
 import pynvml
 import platform
 import psutil
+import pyperclip
+from ctypes import cast, POINTER
+from comtypes import CLSCTX_ALL
+from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 from datetime import datetime
 from ddgs import DDGS
 from pathlib import Path
@@ -358,3 +362,64 @@ def get_current_datetime():
         "time": now.strftime("%H:%M:%S"),
         "day": now.strftime("%A"),
     }
+
+def get_clipboard():
+    try:
+        text = pyperclip.paste()
+        return {"success": True, "text": text}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def set_clipboard(text: str):
+    try:
+        pyperclip.copy(text)
+        return {"success": True, "message": "Text copied to clipboard."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def set_volume(level: int):
+    try:
+        level = max(0, min(100, level))
+        devices = AudioUtilities.GetSpeakers()
+        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        volume = cast(interface, POINTER(IAudioEndpointVolume))
+        volume.SetMasterVolumeLevelScalar(level / 100.0, None)
+        return {"success": True, "message": f"Volume set to {level}%."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def toggle_mute():
+    try:
+        devices = AudioUtilities.GetSpeakers()
+        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        volume = cast(interface, POINTER(IAudioEndpointVolume))
+        is_muted = volume.GetMute()
+        volume.SetMute(not is_muted, None)
+        state = "unmuted" if is_muted else "muted"
+        return {"success": True, "message": f"Sound {state}."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def media_control(action: str):
+    import ctypes
+
+    key_map = {
+        "play_pause": 0xB3,
+        "next": 0xB0,
+        "prev": 0xB1,
+    }
+
+    if action not in key_map:
+        return {
+            "success": False,
+            "error": "Unknown action. Allowed actions: play_pause, next, prev.",
+        }
+
+    vk_code = key_map[action]
+    ctypes.windll.user32.keybd_event(vk_code, 0, 0, 0)
+    ctypes.windll.user32.keybd_event(vk_code, 0, 2, 0)
+    return {"success": True, "message": f"Executed action: {action}."}
