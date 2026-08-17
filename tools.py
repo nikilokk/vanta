@@ -1,6 +1,8 @@
 import subprocess
 import os
 import time
+import tempfile
+import mss
 import pynvml
 import platform
 import psutil
@@ -74,6 +76,28 @@ PROTECTED_PROCESSES = {
     "dwm.exe",
     "taskhostw.exe",
 }
+
+def take_screenshot():
+    try:
+        # Папка img в корне вашего проекта D:\Vanta\img
+        project_dir = os.path.dirname(os.path.abspath(__file__))
+        img_dir = os.path.join(project_dir, "img")
+        os.makedirs(img_dir, exist_ok=True)
+
+        # Генерация уникального имени с меткой времени
+        filename = f"screen_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        screenshot_path = os.path.join(img_dir, filename)
+
+        with mss.mss() as sct:
+            sct.shot(mon=1, output=screenshot_path)
+
+        return {
+            "success": True,
+            "image_path": screenshot_path,
+            "message": "Screenshot captured successfully.",
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 def get_uptime():
     uptime_seconds = time.time() - psutil.boot_time()
@@ -379,47 +403,33 @@ def set_clipboard(text: str):
         return {"success": False, "error": str(e)}
 
 
+def _get_volume_control():
+    devices = AudioUtilities.GetSpeakers()
+    if hasattr(devices, "EndpointVolume"):
+        return devices.EndpointVolume
+    if hasattr(devices, "Activate"):
+        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        return cast(interface, POINTER(IAudioEndpointVolume))
+    if hasattr(devices, "_device") and hasattr(devices._device, "Activate"):
+        interface = devices._device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        return cast(interface, POINTER(IAudioEndpointVolume))
+    raise RuntimeError("Unable to acquire audio endpoint interface.")
+
 def set_volume(level: int):
     try:
         level = max(0, min(100, level))
-        devices = AudioUtilities.GetSpeakers()
-        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        volume = cast(interface, POINTER(IAudioEndpointVolume))
+        volume = _get_volume_control()
         volume.SetMasterVolumeLevelScalar(level / 100.0, None)
         return {"success": True, "message": f"Volume set to {level}%."}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-
 def toggle_mute():
     try:
-        devices = AudioUtilities.GetSpeakers()
-        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        volume = cast(interface, POINTER(IAudioEndpointVolume))
+        volume = _get_volume_control()
         is_muted = volume.GetMute()
         volume.SetMute(not is_muted, None)
         state = "unmuted" if is_muted else "muted"
         return {"success": True, "message": f"Sound {state}."}
     except Exception as e:
         return {"success": False, "error": str(e)}
-
-
-def media_control(action: str):
-    import ctypes
-
-    key_map = {
-        "play_pause": 0xB3,
-        "next": 0xB0,
-        "prev": 0xB1,
-    }
-
-    if action not in key_map:
-        return {
-            "success": False,
-            "error": "Unknown action. Allowed actions: play_pause, next, prev.",
-        }
-
-    vk_code = key_map[action]
-    ctypes.windll.user32.keybd_event(vk_code, 0, 0, 0)
-    ctypes.windll.user32.keybd_event(vk_code, 0, 2, 0)
-    return {"success": True, "message": f"Executed action: {action}."}

@@ -1,5 +1,11 @@
 import json
+import os
 from datetime import datetime
+from memory import forget_memory, recall_memory, save_memory
+
+from rich.console import Console
+
+console = Console()
 
 from ollama import chat
 from file_tools import (
@@ -25,7 +31,7 @@ from tools import (
     set_clipboard,
     set_volume,
     toggle_mute,
-    media_control,
+    take_screenshot,
 )
 
 current_year = datetime.now().year
@@ -41,6 +47,10 @@ SYSTEM_PROMPT = f"""Ты Vanta — локальный AI-ассистент, у�
 - Если нужно узнать актуальную версию чего-либо, ищи без указания года или используй {current_year} год.
 - Для поиска программных версий, документации и IT-новостей всегда формулируй query на английском языке (например, "latest python release version").
 - Если в результатах поиска нет конкретной цифры или ответа, измени запрос на более точный (например, добавь site:python.org/downloads).
+
+MEMORY INSTRUCTIONS:
+- Whenever the user shares personal preferences, facts, or instructions to remember, call 'save_memory'.
+- Before answering queries about user preferences or past choices, check 'recall_memory'.
 
 ГЛАВНОЕ ПРАВИЛО:
 - Если пользователь просит выполнить действие (изменить файл, запустить программу, найти информацию), ТЫ ОБЯЗАН СРАЗУ ВЫЗВАТЬ СООТВЕТСТВУЮЩИЙ ИНСТРУМЕНТ (tool_call).
@@ -64,6 +74,60 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "save_memory",
+            "description": "Saves a key-value fact or user preference into persistent long-term memory.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "Category or key name (e.g., 'user_name', 'favorite_music', 'preferred_ide')."
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "The fact or detail to remember."
+                    }
+                },
+                "required": ["key", "value"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recall_memory",
+            "description": "Retrieves saved facts or preferences from long-term memory. Leave key empty to retrieve all memories.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "Optional specific key to recall."
+                    }
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "forget_memory",
+            "description": "Deletes a specific fact or key from long-term memory.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "Key to remove."
+                    }
+                },
+                "required": ["key"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "set_clipboard",
             "description": "Copies specified text to the Windows clipboard.",
             "parameters": {
@@ -76,6 +140,14 @@ TOOLS = [
                 },
                 "required": ["text"]
             }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "take_screenshot",
+            "description": "Takes a screenshot of the current screen to inspect what is shown on the display.",
+            "parameters": {"type": "object", "properties": {}}
         }
     },
     {
@@ -416,8 +488,14 @@ def execute_tool(name, arguments):
         return set_volume(**arguments)
     if name == "toggle_mute":
         return toggle_mute()
-    if name == "media_control":
-        return media_control(**arguments)
+    if name == "save_memory":
+        return save_memory(**arguments)
+    if name == "recall_memory":
+        return recall_memory(**arguments)
+    if name == "forget_memory":
+        return forget_memory(**arguments)
+    if name == "take_screenshot":
+        return take_screenshot()
 
     return {"error": f"Unknown tool: {name}"}
 
@@ -431,76 +509,159 @@ def ask_ai(message):
     MAX_STEPS = 30
     step = 0
     DANGEROUS_TOOLS = {"run_command", "write_file", "edit_file", "close_program"}
+    screenshots_to_cleanup = []
 
-    while True:
-        step += 1
+    try:
+        while True:
+            step += 1
 
-        if step > MAX_STEPS:
-            return "Я остановила выполнение после достижения лимита действий."
+            if step > MAX_STEPS:
+                return "Я остановила выполнение после достижения лимита действий."
 
-        try:
-            response = chat(
-                model=MODEL,
-                messages=messages,
-                tools=TOOLS,
-            )
-        except Exception as e:
-            return f"Ошибка при обращении к модели: {e}"
-
-        messages.append(response.message)
-
-        if not response.message.tool_calls:
-            return response.message.content
-
-        for tool_call in response.message.tool_calls:
-            name = tool_call.function.name
-            arguments = tool_call.function.arguments
-
-            print(f"\n[TOOL] {name}({arguments})")
-
-            # Валидация аргументов
-            if isinstance(arguments, str):
-                try:
-                    arguments = json.loads(arguments)
-                except json.JSONDecodeError as e:
-                    result = {"success": False, "error": f"Invalid tool arguments JSON: {e}"}
-                    print(f"[RESULT] {result}")
-                    messages.append({"role": "tool", "content": json.dumps(result, ensure_ascii=False)})
-                    continue
-            elif not isinstance(arguments, dict):
-                result = {"success": False, "error": "Tool arguments must be a dictionary or JSON object."}
-                print(f"[RESULT] {result}")
-                messages.append({"role": "tool", "content": json.dumps(result, ensure_ascii=False)})
-                continue
-
-            # ИСПРАВЛЕННАЯ ПРОВЕРКА ОПАСНЫХ ОПЕРАЦИЙ (без лишнего вложенного цикла)
-            if name in DANGEROUS_TOOLS:
-                print(f"\n⚠️  [WARNING] AI requested execution: {name}({arguments})")
-                confirm = input("Allow execution? [y/N]: ").strip().lower()
-                if confirm not in {"y", "yes"}:
-                    result = {"success": False, "error": "Operation rejected by user."}
-                    print(f"[RESULT] {result}")
-                    messages.append({"role": "tool", "content": json.dumps(result, ensure_ascii=False)})
-                    continue
-
-            # Выполнение инструмента
             try:
-                result = execute_tool(name, arguments)
+                # Если в истории сообщений есть изображения, используем Vision-модель, иначе — обычную
+                has_images = any("images" in m for m in messages)
+                current_model = "qwen3-vl:8b " if has_images else MODEL
+
+                response = chat(
+                    model=current_model,
+                    messages=messages,
+                    tools=TOOLS,
+                    keep_alive=-1,
+                    options={"num_ctx": 16384},
+                )
             except Exception as e:
-                result = {"success": False, "error": f"Tool execution failed: {e}"}
+                return f"Ошибка при обращении к модели: {e}"
 
-            print(f"[RESULT] {result}")
+            messages.append(response.message)
 
-            try:
-                tool_content = json.dumps(result, ensure_ascii=False)
-            except TypeError:
-                tool_content = json.dumps(
-                    {
-                        "success": False,
-                        "error": "Tool returned a value that could not be serialized.",
-                        "raw_result": str(result),
-                    },
-                    ensure_ascii=False,
+            if not response.message.tool_calls:
+                return response.message.content
+
+            for tool_call in response.message.tool_calls:
+                name = tool_call.function.name
+                arguments = tool_call.function.arguments
+
+                console.print(
+                    f"\n[bold yellow]⚡ [TOOL CALL]:[/bold yellow] [bold white]{name}[/bold white] [dim]args: {arguments}[/dim]"
                 )
 
-            messages.append({"role": "tool", "content": tool_content})
+                # Валидация аргументов
+                if isinstance(arguments, str):
+                    try:
+                        arguments = json.loads(arguments)
+                    except json.JSONDecodeError as e:
+                        result = {
+                            "success": False,
+                            "error": f"Invalid tool arguments JSON: {e}",
+                        }
+                        console.print(
+                            f"[bold green]✔ [RESULT]:[/bold green] [dim]{result}[/dim]"
+                        )
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "content": json.dumps(
+                                    result, ensure_ascii=False
+                                ),
+                            }
+                        )
+                        continue
+                elif not isinstance(arguments, dict):
+                    result = {
+                        "success": False,
+                        "error": "Tool arguments must be a dictionary or JSON object.",
+                    }
+                    console.print(
+                        f"[bold green]✔ [RESULT]:[/bold green] [dim]{result}[/dim]"
+                    )
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "content": json.dumps(result, ensure_ascii=False),
+                        }
+                    )
+                    continue
+
+                # Проверка опасных операций
+                if name in DANGEROUS_TOOLS:
+                    console.print(
+                        f"\n[bold red]⚠️  [WARNING] Action required for:[/bold red] [bold white]{name}[/bold white]"
+                    )
+                    confirm = (
+                        console.input(
+                            "[yellow]Allow execution? [y/N]: [/yellow]"
+                        )
+                        .strip()
+                        .lower()
+                    )
+                    if confirm not in {"y", "yes"}:
+                        result = {
+                            "success": False,
+                            "error": "Operation rejected by user.",
+                        }
+                        console.print(
+                            f"[bold red]❌ [RESULT]:[/bold red] [dim]{result}[/dim]"
+                        )
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "content": json.dumps(
+                                    result, ensure_ascii=False
+                                ),
+                            }
+                        )
+                        continue
+
+                # Выполнение инструмента
+                try:
+                    result = execute_tool(name, arguments)
+                except Exception as e:
+                    result = {
+                        "success": False,
+                        "error": f"Tool execution failed: {e}",
+                    }
+
+                console.print(
+                    f"[bold green]✔ [RESULT]:[/bold green] [dim]{result}[/dim]"
+                )
+
+                # Сериализация результата
+                try:
+                    tool_content = json.dumps(result, ensure_ascii=False)
+                except TypeError:
+                    tool_content = json.dumps(
+                        {
+                            "success": False,
+                            "error": "Tool returned a value that could not be serialized.",
+                            "raw_result": str(result),
+                        },
+                        ensure_ascii=False,
+                    )
+
+                tool_message = {
+                    "role": "tool",
+                    "content": tool_content,
+                }
+
+                # Если сделан скриншот — добавляем картинку в сообщение и в список на авто-удаление
+                if (
+                    name == "take_screenshot"
+                    and isinstance(result, dict)
+                    and result.get("success")
+                ):
+                    img_path = result.get("image_path")
+                    if img_path:
+                        tool_message["images"] = [img_path]
+                        screenshots_to_cleanup.append(img_path)
+
+                messages.append(tool_message)
+
+    finally:
+        # Очистка всех созданных за этот запрос скриншотов
+        for img_path in screenshots_to_cleanup:
+            if os.path.exists(img_path):
+                try:
+                    os.remove(img_path)
+                except Exception:
+                    pass
