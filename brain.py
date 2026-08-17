@@ -32,6 +32,7 @@ from tools import (
     set_volume,
     toggle_mute,
     take_screenshot,
+    analyze_codebase,
 )
 
 current_year = datetime.now().year
@@ -57,20 +58,43 @@ MEMORY INSTRUCTIONS:
 - Не объясняй, как выполнить задачу, и не описывай доступные функции.
 - Не пиши вводный текст перед вызовом инструмента. Сначала вызывай инструмент, а итоговый ответ давай только после получения результатов.
 - Для изменения файлов проекта сначала прочитай файл через read_file, затем внеси изменения через edit_file.
+ВАЖНОЕ ПРАВИЛО: Тебе ЗАПРЕЩЕНО перезаписывать файлы проекта (brain.py, tools.py, main.py) целиком через функцию write_file. Для изменения кода предлагай текстовый диф/код пользователю или создавай новые файлы в отдельной папке.
 """
 
 MODEL = "qwen3:8b"
 
 TOOLS = [
 
+    
+
     {
         "type": "function",
         "function": {
             "name": "get_clipboard",
             "description": "Reads current text from the Windows clipboard.",
-            "parameters": {"type": "object", "properties": {}}
+            "parameters": {"type": "object", "properties": {}
+            }
         }
     },
+    
+    {
+            "type": "function",
+            "function": {
+                "name": "analyze_codebase",
+                "description": "Analyzes a Python file for syntax errors, missing docstrings, function structures, and unused imports.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "Path to the .py file to analyze",
+                        }
+                    },
+                    "required": ["file_path"],
+                },
+            },
+        },
+    
     {
         "type": "function",
         "function": {
@@ -496,6 +520,8 @@ def execute_tool(name, arguments):
         return forget_memory(**arguments)
     if name == "take_screenshot":
         return take_screenshot()
+    if name == "analyze_codebase":
+            return analyze_codebase()
 
     return {"error": f"Unknown tool: {name}"}
 

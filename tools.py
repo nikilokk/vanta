@@ -1,6 +1,7 @@
 import subprocess
 import os
 import time
+import ast
 import tempfile
 import mss
 import pynvml
@@ -13,6 +14,7 @@ from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 from datetime import datetime
 from ddgs import DDGS
 from pathlib import Path
+from typing import Any, Dict
 
 PROGRAM_ALIASES = {
     "vs code": "visual studio code",
@@ -23,6 +25,74 @@ PROGRAM_ALIASES = {
     "firefox": "firefox",
     "chrome": "google chrome",
 }
+
+def analyze_codebase(file_path: str) -> Dict[str, Any]:
+    if not os.path.exists(file_path):
+        return {"success": False, "error": f"File not found: {file_path}"}
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            code = f.read()
+    except Exception as e:
+        return {"success": False, "error": f"Failed to read file: {str(e)}"}
+
+    try:
+        tree = ast.parse(code, filename=file_path)
+    except SyntaxError as e:
+        return {
+            "success": False,
+            "syntax_errors": [
+                {
+                    "line": e.lineno,
+                    "offset": e.offset,
+                    "message": e.msg,
+                    "text": e.text.strip() if e.text else "",
+                }
+            ],
+        }
+
+    definitions = []
+    no_docstrings = []
+    imported_names = set()
+    used_names = set()
+
+    for node in ast.walk(tree):
+        if isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ):
+            definitions.append(
+                {
+                    "type": node.__class__.__name__,
+                    "name": node.name,
+                    "start_line": node.lineno,
+                    "end_line": getattr(node, "end_lineno", node.lineno),
+                }
+            )
+
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if not ast.get_docstring(node):
+                no_docstrings.append({"name": node.name, "line": node.lineno})
+
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imported_names.add(alias.asname if alias.asname else alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                imported_names.add(alias.asname if alias.asname else alias.name)
+
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+            used_names.add(node.id)
+
+    unused_imports = list(imported_names - used_names)
+
+    return {
+        "success": True,
+        "file_path": file_path,
+        "definitions": definitions,
+        "no_docstrings": no_docstrings,
+        "unused_imports": unused_imports,
+        "syntax_errors": [],
+    }
 
 def get_system_info():
     memory = psutil.virtual_memory()
