@@ -1,7 +1,9 @@
+# memory.py
 import json
 from pathlib import Path
+from config import DATA_DIR  # <-- Импортируем папку data
 
-MEMORY_FILE = Path("D:/Vanta/memory.json")
+MEMORY_FILE = DATA_DIR / "memory.json"
 
 
 def _load_memory() -> dict:

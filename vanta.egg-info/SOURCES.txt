@@ -1,0 +1,14 @@
+pyproject.toml
+core/brain.py
+core/memory.py
+core/scheduler.py
+interfaces/main.py
+interfaces/tg_bot.py
+interfaces/tts.py
+interfaces/voice_input.py
+tools/file_tools.py
+tools/tools.py
+vanta.egg-info/PKG-INFO
+vanta.egg-info/SOURCES.txt
+vanta.egg-info/dependency_links.txt
+vanta.egg-info/top_level.txt

@@ -1,0 +1,21 @@
+# Окружение
+.venv/
+__pycache__/
+*.pyc
+.streamlit/
+
+# Секреты (ВАЖНО!)
+.env
+
+# Данные и библиотеки
+data/
+libs/
+*.dll
+
+# Редакторы
+.vscode/
+.idea/
+
+# Временные файлы
+*.log
+temp_voice_*.mp3
