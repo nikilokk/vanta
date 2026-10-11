@@ -13,25 +13,14 @@ from datetime import datetime
 from pathlib import Path
 
 
-# === ЗАЩИЩЁННЫЕ ПРОЦЕССЫ (нельзя закрывать) ===
 PROTECTED_PROCESSES = {
-    "system",
-    "registry",
-    "smss.exe",
-    "csrss.exe",
-    "wininit.exe",
-    "winlogon.exe",
-    "services.exe",
-    "lsass.exe",
-    "svchost.exe",
-    "explorer.exe",
-    "dwm.exe",
-    "taskhostw.exe",
+    "system", "registry", "smss.exe", "csrss.exe", "wininit.exe",
+    "winlogon.exe", "services.exe", "lsass.exe", "svchost.exe",
+    "explorer.exe", "dwm.exe", "taskhostw.exe",
 }
 
 
 def get_system_info():
-    """Информация о CPU, RAM и дисках."""
     memory = psutil.virtual_memory()
     disks = []
 
@@ -65,7 +54,6 @@ def get_system_info():
 
 
 def get_gpu_info():
-    """Информация о видеокарте NVIDIA."""
     try:
         pynvml.nvmlInit()
         gpu_count = pynvml.nvmlDeviceGetCount()
@@ -76,9 +64,7 @@ def get_gpu_info():
             name = pynvml.nvmlDeviceGetName(handle)
             memory = pynvml.nvmlDeviceGetMemoryInfo(handle)
             utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
-            temperature = pynvml.nvmlDeviceGetTemperature(
-                handle, pynvml.NVML_TEMPERATURE_GPU
-            )
+            temperature = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
             if isinstance(name, bytes):
                 name = name.decode("utf-8")
 
@@ -99,7 +85,6 @@ def get_gpu_info():
 
 
 def get_running_processes(limit: int = 10):
-    """Список наиболее загруженных процессов."""
     processes = []
     for process in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent"]):
         try:
@@ -118,7 +103,6 @@ def get_running_processes(limit: int = 10):
 
 
 def close_program(program: str):
-    """Закрывает программу по имени."""
     program = program.lower().strip()
     if len(program) < 3:
         return {"success": False, "error": "Имя программы слишком короткое."}
@@ -152,7 +136,6 @@ def close_program(program: str):
 
 
 def get_uptime():
-    """Время с момента загрузки ПК."""
     uptime_seconds = time.time() - psutil.boot_time()
     hours = int(uptime_seconds // 3600)
     minutes = int((uptime_seconds % 3600) // 60)
@@ -160,8 +143,10 @@ def get_uptime():
 
 
 def take_screenshot():
-    """Скриншот экрана в папку img/."""
+    """Скриншот в папку img/."""
     try:
+        time.sleep(0.5)
+
         project_dir = Path(__file__).resolve().parent.parent
         img_dir = project_dir / "img"
         img_dir.mkdir(exist_ok=True)
@@ -181,8 +166,45 @@ def take_screenshot():
         return {"success": False, "error": str(e)}
 
 
+def analyze_screenshot(prompt: str = "Опиши, что видишь на экране."):
+    """Скриншот + анализ через OpenAI Vision (gpt-4o-mini)."""
+    shot = take_screenshot()
+    if not shot.get("success"):
+        return shot
+
+    img_path = shot["image_path"]
+
+    try:
+        from core.api_client import analyze_image
+        description = analyze_image(img_path, prompt)
+        return {
+            "success": True,
+            "description": description,
+            "image_path": img_path,
+        }
+    except Exception as e:
+        return {"success": False, "error": f"Vision error: {e}", "image_path": img_path}
+
+
+def get_screen_size():
+    try:
+        import pyautogui
+        w, h = pyautogui.size()
+        return {"success": True, "width": w, "height": h}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def wait(seconds: float):
+    if seconds < 0:
+        seconds = 0
+    if seconds > 10:
+        seconds = 10
+    time.sleep(seconds)
+    return {"success": True, "waited": seconds}
+
+
 def get_clipboard():
-    """Читает текст из буфера обмена."""
     try:
         return {"success": True, "text": pyperclip.paste()}
     except Exception as e:
@@ -190,7 +212,6 @@ def get_clipboard():
 
 
 def set_clipboard(text: str):
-    """Копирует текст в буфер обмена."""
     try:
         pyperclip.copy(text)
         return {"success": True, "message": "Text copied to clipboard."}
@@ -212,7 +233,6 @@ def _get_volume_control():
 
 
 def set_volume(level: int):
-    """Устанавливает громкость 0-100."""
     try:
         level = max(0, min(100, level))
         volume = _get_volume_control()
@@ -223,7 +243,6 @@ def set_volume(level: int):
 
 
 def toggle_mute():
-    """Переключает mute."""
     try:
         volume = _get_volume_control()
         is_muted = volume.GetMute()

@@ -1,7 +1,6 @@
 # core/validators.py
 """
 Pydantic-схемы для валидации аргументов инструментов.
-Если модель передаёт мусор — она получает понятную ошибку и пробует снова.
 """
 from typing import Optional, Literal
 from pydantic import BaseModel, Field, field_validator
@@ -9,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 # === ФАЙЛОВЫЕ ОПЕРАЦИИ ===
 class ReadFileArgs(BaseModel):
-    path: str = Field(..., min_length=1, description="Путь к файлу")
+    path: str = Field(..., min_length=1)
 
 
 class WriteFileArgs(BaseModel):
@@ -41,7 +40,7 @@ class CloseProgramArgs(BaseModel):
 
 
 class SetVolumeArgs(BaseModel):
-    level: int = Field(..., ge=0, le=100, description="Громкость 0-100")
+    level: int = Field(..., ge=0, le=100)
 
 
 class SetClipboardArgs(BaseModel):
@@ -61,7 +60,6 @@ class OpenWebsiteArgs(BaseModel):
     def _check_url(cls, v: str) -> str:
         v = v.strip()
         if not (v.startswith("http://") or v.startswith("https://")):
-            # Автоматически добавляем схему — частая ошибка модели
             v = "https://" + v
         return v
 
@@ -90,7 +88,6 @@ class ForgetMemoryArgs(BaseModel):
     key: str = Field(..., min_length=1)
 
 
-# === ВЕКТОРНАЯ ПАМЯТЬ ===
 class RememberConversationArgs(BaseModel):
     summary: str = Field(..., min_length=3, max_length=2000)
 
@@ -122,13 +119,14 @@ class GenerateCodeLocalArgs(BaseModel):
 # === ПЛАНИРОВЩИК ===
 class AddIntervalTaskArgs(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
-    minutes: int = Field(..., ge=1, le=1440, description="Интервал в минутах (1-1440)")
+    minutes: int = Field(..., ge=1, le=1440)
     prompt: str = Field(..., min_length=1)
     task_type: Literal["notification", "ai_task"] = "ai_task"
 
 
 class RemoveScheduledTaskArgs(BaseModel):
     job_id: str = Field(..., min_length=3)
+
 
 # === GUI-АВТОМАТИЗАЦИЯ ===
 class MoveMouseArgs(BaseModel):
@@ -194,7 +192,73 @@ class ClickOnImageArgs(BaseModel):
     confidence: float = Field(default=0.8, ge=0.1, le=1.0)
 
 
-# === КАРТА СХЕМ: имя инструмента -> Pydantic-модель ===
+class WaitArgs(BaseModel):
+    seconds: float = Field(..., ge=0.0, le=10.0)
+
+
+class GetScreenSizeArgs(BaseModel):
+    pass
+
+
+class AnalyzeScreenshotArgs(BaseModel):
+    prompt: str = Field(..., min_length=5, max_length=1000)
+
+
+# === WEB APPS ===
+class GoogleSearchArgs(BaseModel):
+    query: str = Field(..., min_length=1, max_length=200)
+    open_first: bool = False
+
+
+class YoutubeSearchArgs(BaseModel):
+    query: str = Field(..., min_length=1, max_length=200)
+    open_first: bool = True
+
+
+class WikipediaSearchArgs(BaseModel):
+    query: str = Field(..., min_length=1, max_length=200)
+
+
+class GithubSearchArgs(BaseModel):
+    query: str = Field(..., min_length=1, max_length=200)
+    search_type: Literal["repositories", "code", "issues", "users"] = "repositories"
+
+
+class StackoverflowSearchArgs(BaseModel):
+    query: str = Field(..., min_length=1, max_length=200)
+
+
+class RedditSearchArgs(BaseModel):
+    query: str = Field(..., min_length=1, max_length=200)
+
+
+class MapsSearchArgs(BaseModel):
+    query: str = Field(..., min_length=1, max_length=200)
+
+
+class TranslateTextArgs(BaseModel):
+    text: str = Field(..., min_length=1, max_length=5000)
+    to_lang: str = Field(default="en", min_length=2, max_length=5)
+
+
+class DiscordOpenArgs(BaseModel):
+    channel_name: Optional[str] = None
+
+
+class DiscordSendArgs(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000)
+    channel_name: Optional[str] = None
+
+
+class SpotifyPlayArgs(BaseModel):
+    query: str = Field(..., min_length=1, max_length=200)
+
+
+class TwitchSearchArgs(BaseModel):
+    query: str = Field(..., min_length=1, max_length=200)
+
+
+# === КАРТА СХЕМ ===
 TOOL_SCHEMAS = {
     # file_tools
     "read_file": ReadFileArgs,
@@ -217,7 +281,6 @@ TOOL_SCHEMAS = {
     "save_memory": SaveMemoryArgs,
     "recall_memory": RecallMemoryArgs,
     "forget_memory": ForgetMemoryArgs,
-    # vector memory
     "remember_conversation": RememberConversationArgs,
     "search_memory": SearchMemoryArgs,
     # sandbox
@@ -242,4 +305,20 @@ TOOL_SCHEMAS = {
     "activate_window": ActivateWindowArgs,
     "find_on_screen": FindOnScreenArgs,
     "click_on_image": ClickOnImageArgs,
+    "wait": WaitArgs,
+    "get_screen_size": GetScreenSizeArgs,
+    "analyze_screenshot": AnalyzeScreenshotArgs,
+    # web_apps
+    "google_search": GoogleSearchArgs,
+    "youtube_search": YoutubeSearchArgs,
+    "wikipedia_search": WikipediaSearchArgs,
+    "github_search": GithubSearchArgs,
+    "stackoverflow_search": StackoverflowSearchArgs,
+    "reddit_search": RedditSearchArgs,
+    "maps_search": MapsSearchArgs,
+    "translate_text": TranslateTextArgs,
+    "discord_open": DiscordOpenArgs,
+    "discord_send": DiscordSendArgs,
+    "spotify_play": SpotifyPlayArgs,
+    "twitch_search": TwitchSearchArgs,
 }

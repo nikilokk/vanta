@@ -2,8 +2,6 @@
 import ast
 import os
 from typing import Any, Dict
-from ollama import chat
-from config import CODER_MODEL
 
 
 def analyze_codebase(file_path: str) -> Dict[str, Any]:
@@ -69,19 +67,10 @@ def analyze_codebase(file_path: str) -> Dict[str, Any]:
 
 
 def generate_code_local(prompt: str, language: str = "python") -> dict:
-    """Генерация кода через qwen2.5-coder."""
+    """Генерация кода через OpenAI (gpt-5-mini). Название оставил для совместимости с TOOL_REGISTRY."""
     try:
-        system_instruction = (
-            f"Ты — Senior Software Engineer. Пиши чистый, рабочий и оптимизированный "
-            f"код на языке {language} с обработкой ошибок и комментариями."
-        )
-        response = chat(
-            model=CODER_MODEL,
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": prompt},
-            ],
-        )
-        return {"success": True, "code": response.message.content}
+        from core.api_client import generate_code
+        code = generate_code(prompt, language)
+        return {"success": True, "code": code}
     except Exception as e:
-        return {"success": False, "error": f"Ошибка кодера: {e}"}
+        return {"success": False, "error": f"Ошибка генерации: {e}"}

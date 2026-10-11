@@ -1,6 +1,7 @@
 # tools/programs.py
 import os
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -47,29 +48,29 @@ def _find_program(program: str):
 
 def open_program(program: str):
     """Ищет и запускает программу (или открывает файл/URL)."""
-    # Если это URL — просто открываем
     if program.startswith(("http://", "https://")):
         try:
             os.startfile(program)
+            time.sleep(3)  # <-- принудительная пауза: браузеру нужно время
             return {"success": True, "message": f"Opened URL: {program}"}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    # Пытаемся найти в Start Menu / where
     path = _find_program(program)
 
     try:
         if path:
             os.startfile(path)
+            time.sleep(2.5)  # <-- пауза: программе нужно время на старт
             return {
                 "success": True,
                 "program": program,
                 "path": path,
-                "message": f"Launched {program}"
+                "message": f"Launched {program}. Waited for startup."
             }
         else:
-            # Пробуем запустить напрямую (вдруг это команда в PATH)
             os.startfile(program)
+            time.sleep(2.5)
             return {"success": True, "message": f"Opened {program}"}
     except Exception as e:
         return {"success": False, "error": f"Failed to open '{program}': {e}"}
@@ -79,6 +80,7 @@ def open_website(url: str):
     """Открывает сайт в браузере по умолчанию."""
     try:
         os.startfile(url)
-        return {"success": True, "message": f"Opened {url}"}
+        time.sleep(3)  # <-- пауза: страница должна начать грузиться
+        return {"success": True, "message": f"Opened {url}. Waited 3s."}
     except Exception as e:
         return {"success": False, "error": str(e)}

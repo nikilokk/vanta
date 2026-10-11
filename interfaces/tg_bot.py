@@ -179,20 +179,22 @@ def _run_bot():
     """Внутренняя функция — запускается в фоновом потоке."""
     global _bot_app, _bot_loop
 
-    if not TELEGRAM_TOKEN or TELEGRAM_TOKEN.startswith("твой_"):
+    # Проверяем, что токен задан (учитываем "disabled" из .env)
+    if (
+        not TELEGRAM_TOKEN
+        or TELEGRAM_TOKEN in ("disabled", "none", "")
+        or TELEGRAM_TOKEN.startswith("твой_")
+    ):
         logger.warning("TG: токен не задан — бот не запущен")
         return
 
     try:
-        # Создаём новый event loop для бота
         _bot_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(_bot_loop)
 
-        # Собираем приложение
         app = Application.builder().token(TELEGRAM_TOKEN).build()
         _bot_app = app
 
-        # Регистрируем хендлеры — ВСЕ ВНУТРИ ЭТОГО БЛОКА
         app.add_handler(CommandHandler("start", cmd_start))
         app.add_handler(CommandHandler("help", cmd_help))
         app.add_handler(CommandHandler("clear", cmd_clear))

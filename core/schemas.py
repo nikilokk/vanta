@@ -20,7 +20,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "write_file",
-            "description": "Создаёт НОВЫЙ текстовый файл внутри проекта Vanta. НЕ используй для изменения существующих файлов.",
+            "description": "Создаёт НОВЫЙ текстовый файл. НЕ используй для изменения существующих.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -35,11 +35,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "edit_file",
-            "description": "Точечно изменяет существующий файл. Сначала прочитай файл через read_file.",
+            "description": "Точечно изменяет существующий файл. Сначала прочитай через read_file.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Путь к файлу."},
+                    "path": {"type": "string"},
                     "old_text": {"type": "string", "description": "Точный фрагмент для замены."},
                     "new_text": {"type": "string", "description": "Новый текст."}
                 },
@@ -81,7 +81,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_system_info",
-            "description": "Получает информацию о CPU, RAM и дисках.",
+            "description": "Информация о CPU, RAM и дисках.",
             "parameters": {"type": "object", "properties": {}}
         }
     },
@@ -114,7 +114,7 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "program": {"type": "string", "description": "Название программы."}
+                    "program": {"type": "string"}
                 },
                 "required": ["program"]
             }
@@ -152,7 +152,7 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "text": {"type": "string", "description": "Текст для копирования."}
+                    "text": {"type": "string"}
                 },
                 "required": ["text"]
             }
@@ -204,7 +204,7 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "Полный URL."}
+                    "url": {"type": "string"}
                 },
                 "required": ["url"]
             }
@@ -216,11 +216,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Ищет информацию в интернете через DuckDuckGo.",
+            "description": "Ищет информацию в интернете и возвращает ТЕКСТОВЫЕ результаты (сниппеты). Используй для вопросов «узнай», «расскажи», «какая погода», «сколько стоит», «что такое». Ты САМА читаешь результаты и пересказываешь пользователю.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Поисковый запрос (английский для IT-тем)."},
+                    "query": {"type": "string", "description": "Поисковый запрос (2-4 слова)."},
                     "max_results": {"type": "integer", "default": 5}
                 },
                 "required": ["query"]
@@ -235,7 +235,7 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "username": {"type": "string", "description": "Никнейм."}
+                    "username": {"type": "string"}
                 },
                 "required": ["username"]
             }
@@ -259,8 +259,8 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "key": {"type": "string", "description": "Ключ (например, 'user_name')."},
-                    "value": {"type": "string", "description": "Значение."}
+                    "key": {"type": "string"},
+                    "value": {"type": "string"}
                 },
                 "required": ["key", "value"]
             }
@@ -287,9 +287,37 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "key": {"type": "string", "description": "Ключ для удаления."}
+                    "key": {"type": "string"}
                 },
                 "required": ["key"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remember_conversation",
+            "description": "Сохраняет текущий диалог в векторную память. Используй для планов, историй, опыта.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "summary": {"type": "string", "description": "Краткое содержание (1-2 предложения)."}
+                },
+                "required": ["summary"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_memory",
+            "description": "Ищет в векторной памяти прошлые разговоры. Используй на «помнишь...», «о чём говорили...».",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"}
+                },
+                "required": ["query"]
             }
         }
     },
@@ -311,7 +339,7 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "relative_path": {"type": "string", "description": "Относительный путь."}
+                    "relative_path": {"type": "string"}
                 },
                 "required": ["relative_path"]
             }
@@ -325,8 +353,8 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "relative_path": {"type": "string", "description": "Относительный путь."},
-                    "content": {"type": "string", "description": "Содержимое."}
+                    "relative_path": {"type": "string"},
+                    "content": {"type": "string"}
                 },
                 "required": ["relative_path", "content"]
             }
@@ -342,7 +370,7 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_path": {"type": "string", "description": "Путь к .py файлу."}
+                    "file_path": {"type": "string"}
                 },
                 "required": ["file_path"]
             }
@@ -352,7 +380,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "generate_code_local",
-            "description": "Генерирует код через локальную модель qwen2.5-coder.",
+            "description": "Генерирует код через gpt-5-mini. Используй для написания, исправления или рефакторинга кода.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -369,17 +397,16 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "add_interval_task",
-            "description": "Создаёт задачу, повторяющуюся каждые N минут. Используй 'notification' для простых напоминаний (текст отправляется как есть) и 'ai_task' для задач, где нужно, чтобы Ванта подумала и дала ответ.",
+            "description": "Создаёт задачу, повторяющуюся каждые N минут. 'notification' для простых напоминаний, 'ai_task' для задач с ИИ.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string", "description": "Имя задачи."},
-                    "minutes": {"type": "integer", "description": "Интервал в минутах."},
-                    "prompt": {"type": "string", "description": "Текст напоминания (для notification) или запрос (для ai_task)."},
+                    "name": {"type": "string"},
+                    "minutes": {"type": "integer"},
+                    "prompt": {"type": "string"},
                     "task_type": {
                         "type": "string",
-                        "enum": ["notification", "ai_task"],
-                        "description": "'notification' — простое напоминание. 'ai_task' — задача для ИИ."
+                        "enum": ["notification", "ai_task"]
                     }
                 },
                 "required": ["name", "minutes", "prompt", "task_type"]
@@ -390,7 +417,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "list_scheduled_tasks",
-            "description": "Список активных задач.",
+            "description": "Список активных задач планировщика.",
             "parameters": {"type": "object", "properties": {}}
         }
     },
@@ -402,59 +429,25 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "job_id": {"type": "string", "description": "ID задачи."}
+                    "job_id": {"type": "string"}
                 },
                 "required": ["job_id"]
             }
         }
     },
-        # === ВЕКТОРНАЯ ПАМЯТЬ ===
-    {
-        "type": "function",
-        "function": {
-            "name": "remember_conversation",
-            "description": "Сохраняет текущий диалог в долговременную векторную память. Используй, когда пользователь делится чем-то важным: планами, мыслями, опытом, историями.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "summary": {
-                        "type": "string",
-                        "description": "Краткое содержание того, что нужно запомнить (1-2 предложения)."
-                    }
-                },
-                "required": ["summary"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_memory",
-            "description": "Ищет в долговременной памяти прошлые разговоры и события по смыслу. Используй, когда пользователь спрашивает 'помнишь...', 'о чём мы говорили...', 'что я рассказывал про...'.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Поисковый запрос — что именно вспомнить."
-                    }
-                },
-                "required": ["query"]
-            }
-        }
-    },
-        # === GUI-АВТОМАТИЗАЦИЯ ===
+
+    # === GUI-АВТОМАТИЗАЦИЯ ===
     {
         "type": "function",
         "function": {
             "name": "move_mouse",
-            "description": "Перемещает курсор мыши в точку (x, y) на экране.",
+            "description": "Перемещает курсор в точку (x, y).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "x": {"type": "integer", "description": "X-координата."},
-                    "y": {"type": "integer", "description": "Y-координата."},
-                    "duration": {"type": "number", "default": 0.3, "description": "Длительность перемещения в секундах."}
+                    "x": {"type": "integer"},
+                    "y": {"type": "integer"},
+                    "duration": {"type": "number", "default": 0.3}
                 },
                 "required": ["x", "y"]
             }
@@ -464,12 +457,12 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "click_mouse",
-            "description": "Кликает мышью. Если x/y не указаны — клик в текущей позиции.",
+            "description": "Клик мышью. Если x/y не указаны — клик в текущей позиции.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "x": {"type": "integer", "description": "X-координата (опционально)."},
-                    "y": {"type": "integer", "description": "Y-координата (опционально)."},
+                    "x": {"type": "integer"},
+                    "y": {"type": "integer"},
                     "button": {"type": "string", "enum": ["left", "right", "middle"], "default": "left"},
                     "clicks": {"type": "integer", "default": 1}
                 }
@@ -508,7 +501,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "drag_mouse",
-            "description": "Перетаскивает: зажать ЛКМ в (x1,y1), тащить в (x2,y2), отпустить.",
+            "description": "Перетаскивание: зажать ЛКМ в (x1,y1), тащить в (x2,y2), отпустить.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -526,11 +519,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "scroll_mouse",
-            "description": "Прокрутка колесом мыши. amount > 0 — вверх, < 0 — вниз.",
+            "description": "Прокрутка. amount > 0 — вверх, < 0 — вниз.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "amount": {"type": "integer", "description": "Величина прокрутки."},
+                    "amount": {"type": "integer"},
                     "x": {"type": "integer"},
                     "y": {"type": "integer"}
                 },
@@ -542,7 +535,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_mouse_position",
-            "description": "Возвращает текущие координаты курсора мыши.",
+            "description": "Текущие координаты курсора.",
             "parameters": {"type": "object", "properties": {}}
         }
     },
@@ -550,11 +543,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "type_text",
-            "description": "Печатает текст в активное окно. Поддерживает русский (через буфер обмена).",
+            "description": "Печатает текст в активное окно. Работает с кириллицей.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "text": {"type": "string", "description": "Текст для ввода."}
+                    "text": {"type": "string"}
                 },
                 "required": ["text"]
             }
@@ -564,11 +557,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "press_key",
-            "description": "Нажимает одну клавишу: 'enter', 'esc', 'tab', 'f5', 'delete' и т.д.",
+            "description": "Нажимает одну клавишу: 'enter', 'esc', 'tab', 'f5' и т.д.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "key": {"type": "string", "description": "Название клавиши."}
+                    "key": {"type": "string"}
                 },
                 "required": ["key"]
             }
@@ -578,11 +571,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "hotkey",
-            "description": "Нажимает комбинацию клавиш через '+'. Пример: 'ctrl+c', 'alt+tab', 'ctrl+shift+esc'.",
+            "description": "Комбинация клавиш через '+'. Пример: 'ctrl+c', 'alt+tab'.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "keys": {"type": "string", "description": "Комбинация, например 'ctrl+c'."}
+                    "keys": {"type": "string"}
                 },
                 "required": ["keys"]
             }
@@ -592,7 +585,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "list_windows",
-            "description": "Возвращает список открытых окон Windows.",
+            "description": "Список открытых окон Windows.",
             "parameters": {"type": "object", "properties": {}}
         }
     },
@@ -600,11 +593,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "activate_window",
-            "description": "Активирует окно по части заголовка (выводит на передний план).",
+            "description": "Активирует окно по части заголовка.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "Часть заголовка окна."}
+                    "title": {"type": "string"}
                 },
                 "required": ["title"]
             }
@@ -614,12 +607,12 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "find_on_screen",
-            "description": "Ищет изображение (PNG) на экране. Возвращает координаты центра, если нашёл.",
+            "description": "Ищет PNG-изображение на экране.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "image_path": {"type": "string", "description": "Путь к PNG-файлу."},
-                    "confidence": {"type": "number", "default": 0.8, "description": "Точность совпадения 0.0-1.0."}
+                    "image_path": {"type": "string"},
+                    "confidence": {"type": "number", "default": 0.8}
                 },
                 "required": ["image_path"]
             }
@@ -629,14 +622,224 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "click_on_image",
-            "description": "Ищет изображение на экране и кликает по его центру.",
+            "description": "Ищет изображение на экране и кликает по центру.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "image_path": {"type": "string", "description": "Путь к PNG-файлу."},
+                    "image_path": {"type": "string"},
                     "confidence": {"type": "number", "default": 0.8}
                 },
                 "required": ["image_path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_screen_size",
+            "description": "Разрешение экрана в пикселях.",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wait",
+            "description": "Пауза в секундах. Используй между GUI-действиями.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "seconds": {"type": "number"}
+                },
+                "required": ["seconds"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_screenshot",
+            "description": "Скриншот + анализ через OpenAI Vision (gpt-4o-mini). Возвращает текстовое описание того, что на экране. Используй для GUI-задач: найти кнопку, проверить результат клика.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string", "description": "Что именно узнать из скриншота."}
+                },
+                "required": ["prompt"]
+            }
+        }
+    },
+
+    # ═══ СПЕЦИАЛИЗИРОВАННЫЕ ИНСТРУМЕНТЫ ДЛЯ САЙТОВ ═══
+    {
+        "type": "function",
+        "function": {
+            "name": "google_search",
+            "description": "ОТКРЫВАЕТ браузер на странице Google с запросом. Ты НЕ увидишь результаты. Используй только для 'открой', 'загугли мне'. Для 'узнай/расскажи' используй web_search.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "open_first": {"type": "boolean", "default": False}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "youtube_search",
+            "description": "Открывает YouTube и ищет видео. Опционально запускает первое.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "open_first": {"type": "boolean", "default": True}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wikipedia_search",
+            "description": "Поиск в Wikipedia.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "github_search",
+            "description": "Поиск на GitHub.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "search_type": {"type": "string", "enum": ["repositories", "code", "issues", "users"], "default": "repositories"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "stackoverflow_search",
+            "description": "Поиск на Stack Overflow.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reddit_search",
+            "description": "Поиск на Reddit.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "maps_search",
+            "description": "Поиск на Google Maps.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "translate_text",
+            "description": "Перевод через Google Translate.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "to_lang": {"type": "string", "default": "en"}
+                },
+                "required": ["text"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "discord_open",
+            "description": "Открывает Discord, опционально переходит в канал.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "channel_name": {"type": "string"}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "discord_send",
+            "description": "Отправляет сообщение в Discord.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"},
+                    "channel_name": {"type": "string"}
+                },
+                "required": ["message"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "spotify_play",
+            "description": "Открывает Spotify с поиском.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "twitch_search",
+            "description": "Поиск на Twitch.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"}
+                },
+                "required": ["query"]
             }
         }
     },
