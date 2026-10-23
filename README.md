@@ -1,19 +1,26 @@
 # ◈ Vanta AI
 
-**Vanta** is a modular personal AI assistant for Windows built in Python. It combines OpenAI tool calling, customizable **Grok-style agent personas**, two-tier memory (JSON facts + ChromaDB vector search), system telemetry, GUI automation, and a dark glassmorphic Streamlit dashboard.
+**Vanta** is a modular personal AI assistant for Windows built in Python. It combines OpenAI tool calling, customizable **agent personas**, two-tier memory (JSON facts + ChromaDB vector search), system telemetry, GUI automation, and a dark glassmorphic Streamlit dashboard.
 
 ---
 
 ## ✨ Key Features
 
-- **🤖 Custom Agent Personas (Grok Bots Mode)** — Switch between specialized built-in agents (`Vanta Core`, `Developer`, `SysAdmin`, `Researcher`) or build your own custom agents with isolated system prompts, temperature settings, and granular tool permissions.
+- **🤖 Custom Agent Personas** — Switch between specialized built-in agents (`Vanta Core`, `Developer`, `SysAdmin`, `Researcher`) or build your own custom agents with isolated system prompts, temperature settings, and granular tool permissions.
+  <img width="1528" height="1025" alt="{BEEEABFA-B9CC-4E05-BEC2-420C488C3E2A}" src="https://github.com/user-attachments/assets/210cd63a-ee18-4adb-83af-d7a635328d9d" />
+
 - **🔮 Procedural Animated SVG Blobs** — Each agent features a living, morphing SVG avatar with customizable geometry (`plasma`, `liquid`, `crystal`, `droplet`, `nucleus`) and neon color palettes.
+
+<img width="1792" height="2400" alt="blobs" src="https://github.com/user-attachments/assets/4c196a3c-e2b9-4755-80b0-5232ff48749d" />
+
 - **🧠 Two-Tier Long-Term Memory** — Instant key-value fact storage (`data/memory.json`) paired with semantic conversation search powered by **ChromaDB** and OpenAI embeddings (`text-embedding-3-small`).
 - **🛡️ Sandboxed Execution & Path Security** — Strict path validation (`safe_path`) prevents path traversal, blocks access to sensitive `.env` files, protects Vanta's source code from self-modification, and executes allowed shell commands without injection risks.
 - **🖥️ Desktop & System Automation** — Real-time CPU, RAM, disk, and NVIDIA GPU telemetry (`psutil`, `pynvml`), audio control (`pycaw`), window management, mouse/keyboard control (`PyAutoGUI`), and screen analysis via OpenAI Vision (`gpt-4o-mini`).
 - **🌐 Web Research & OSINT** — DuckDuckGo search (`ddgs`), clean webpage text extraction (`httpx` + `BeautifulSoup`), Sherlock OSINT username lookup, and quick browser launchers.
 - **💬 Three Interfaces** — Interactive **Streamlit Dashboard**, **Rich CLI**, and background **Telegram Bot** with an integrated recurring task scheduler (`APScheduler`).
 - **📊 Token & Cost Analytics** — Thread-safe usage tracking (`data/usage.json`) calculating per-request and daily token costs, including cached prompt token discounts.
+  <img width="1514" height="562" alt="{86EAA56C-50BE-4760-B14D-C43551D37DCF}" src="https://github.com/user-attachments/assets/f23b4e05-dea2-4892-9ea6-0ab57550c358" />
+
 - **🌍 Multilingual UI** — Full localization in **English**, **Russian**, **Ukrainian**, and **Polish**.
 
 ---
@@ -59,7 +66,7 @@ vanta/
 🚀 Quick Start
 1. Clone the repository
 ```Bash
-git clone [https://github.com/YOUR_USERNAME/vanta.git](https://github.com/YOUR_USERNAME/vanta.git)
+git clone https://github.com/YOUR_USERNAME/vanta.git
 cd vanta
 ```
 
