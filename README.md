@@ -10,9 +10,6 @@
   <img width="1528" height="1025" alt="{BEEEABFA-B9CC-4E05-BEC2-420C488C3E2A}" src="https://github.com/user-attachments/assets/210cd63a-ee18-4adb-83af-d7a635328d9d" />
 
 - **🔮 Procedural Animated SVG Blobs** — Each agent features a living, morphing SVG avatar with customizable geometry (`plasma`, `liquid`, `crystal`, `droplet`, `nucleus`) and neon color palettes.
-
-<img width="1792" height="2400" alt="blobs" src="https://github.com/user-attachments/assets/4c196a3c-e2b9-4755-80b0-5232ff48749d" />
-
 - **🧠 Two-Tier Long-Term Memory** — Instant key-value fact storage (`data/memory.json`) paired with semantic conversation search powered by **ChromaDB** and OpenAI embeddings (`text-embedding-3-small`).
 - **🛡️ Sandboxed Execution & Path Security** — Strict path validation (`safe_path`) prevents path traversal, blocks access to sensitive `.env` files, protects Vanta's source code from self-modification, and executes allowed shell commands without injection risks.
 - **🖥️ Desktop & System Automation** — Real-time CPU, RAM, disk, and NVIDIA GPU telemetry (`psutil`, `pynvml`), audio control (`pycaw`), window management, mouse/keyboard control (`PyAutoGUI`), and screen analysis via OpenAI Vision (`gpt-4o-mini`).
