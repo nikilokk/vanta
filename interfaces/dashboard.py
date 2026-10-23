@@ -1,7 +1,6 @@
 # interfaces/dashboard.py
 """
-Vanta Dashboard — Premium Cyberpunk / Grok Blobs Edition.
-Анимированные органические кляксы, темная неоновая эстетика, конструктор агентов.
+Vanta Dashboard — Dark Glassmorphic UI & Custom Agent Builder.
 Запуск: streamlit run interfaces/dashboard.py
 """
 import sys
@@ -63,7 +62,7 @@ ensure_background_services()
 
 
 # ═══════════════════════════════════════════════════════════════
-# ПРЕМИУМ СТИЛИ (Glassmorphism + Живые Кляксы + Неоновое свечение)
+# СТИЛИ ИНТЕРФЕЙСА
 # ═══════════════════════════════════════════════════════════════
 STYLES = """
 <style>
@@ -95,15 +94,6 @@ header[data-testid="stHeader"] {
     padding-top: 1.5rem !important;
     padding-bottom: 2rem !important;
     max-width: 1440px !important;
-}
-
-/* Боковая панель */
-section[data-testid="stSidebar"] {
-    background: #0b0b0e !important;
-    border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
-}
-section[data-testid="stSidebar"] > div {
-    padding: 1.5rem 1.2rem;
 }
 
 /* Логотип */
@@ -143,7 +133,7 @@ section[data-testid="stSidebar"] > div {
     letter-spacing: 0.08em;
 }
 
-/* Анимация органической живой кляксы (Grok Blob) */
+/* Анимация органической живой кляксы */
 @keyframes blob-morph {
     0%, 100% {
         transform: rotate(0deg) scale(1);
@@ -330,8 +320,6 @@ section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) p 
 }
 
 /* === ЖЕСТКАЯ ФИКСАЦИЯ САЙДБАРА (НЕЛЬЗЯ ЗАКРЫТЬ ИЛИ СВЕРНУТЬ) === */
-
-/* 1. Полностью убираем кнопки закрытия ("<") и открытия (">") сайдбара */
 [data-testid="stSidebarCollapseButton"],
 button[data-testid="stSidebarCollapseButton"],
 [data-testid="collapsedControl"],
@@ -342,7 +330,6 @@ button[data-testid="stSidebarCollapseButton"],
     pointer-events: none !important;
 }
 
-/* 2. Принудительно держим сайдбар открытым даже при состоянии aria-expanded="false" */
 section[data-testid="stSidebar"] {
     background: #0b0b0e !important;
     border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
@@ -355,7 +342,6 @@ section[data-testid="stSidebar"] {
     visibility: visible !important;
 }
 
-/* 3. Отключаем ползунок изменения ширины сайдбара мышкой */
 div[data-testid="stSidebarUserContent"] {
     padding-top: 1.5rem !important;
 }
@@ -378,16 +364,26 @@ def page_header(title: str, subtitle: str = "", status: str = "Online"):
     """, unsafe_allow_html=True)
 
 
+def _agent_desc_localized(a: AgentConfig) -> str:
+    """Возвращает локализованное описание для встроенных агентов или пользовательское для кастомных."""
+    if a.is_builtin:
+        key = f"agents.desc.{a.id}"
+        translated = t(key)
+        if translated != key:
+            return translated
+    return a.description or t("agents.no_desc")
+
+
 # ═══════════════════════════════════════════════════════════════
-# САЙДБАР (Брендинг, Язык, Активный Агент с Кляксой, Меню)
+# САЙДБАР
 # ═══════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("""
+    st.markdown(f"""
     <div class="vanta-brand">
         <div class="brand-icon">◈</div>
         <div>
             <div class="brand-name">Vanta AI</div>
-            <div class="brand-tag">Modular Assistant</div>
+            <div class="brand-tag">{t("sidebar.subtitle")}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -463,15 +459,14 @@ with st.sidebar:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 1. ЧАТ (Streamlit Chat Message + Live Blob Header)
+# 1. ЧАТ
 # ═══════════════════════════════════════════════════════════════
 if page == t("nav.chat"):
     agent = get_agent(st.session_state.current_agent_id)
-    tools_count_desc = "All Tools (*)" if "*" in agent.allowed_tools else f"{len(agent.allowed_tools)} tools active"
+    tools_count_desc = t("chat.all_tools") if "*" in agent.allowed_tools else f"{len(agent.allowed_tools)} {t('chat.tools_active')}"
     agent_avatar_path = get_agent_avatar_path(agent.id, agent.blob_preset, agent.blob_palette)
     header_blob_svg = generate_blob_svg(agent.blob_preset, agent.blob_palette, size=46)
 
-    # Верхняя плашка активного агента
     st.markdown(f"""
     <div class="chat-status-bar">
         <div style="display:flex; align-items:center; gap:14px;">
@@ -491,7 +486,6 @@ if page == t("nav.chat"):
     </div>
     """, unsafe_allow_html=True)
 
-    # Отрисовка истории сообщений
     for msg in chat_history[1:]:
         role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
         content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
@@ -501,7 +495,6 @@ if page == t("nav.chat"):
                 st.markdown(content)
 
         elif role == "assistant" and content:
-            # Аватар — кэшированный SVG-файл живой кляксы агента
             with st.chat_message("assistant", avatar=agent_avatar_path):
                 thoughts = msg.get("thoughts", "") if isinstance(msg, dict) else ""
                 if not thoughts and "<think>" in str(content):
@@ -511,7 +504,7 @@ if page == t("nav.chat"):
                         content = _re.sub(r"<think>.*?</think>", "", content, flags=_re.DOTALL).strip()
 
                 if thoughts:
-                    with st.expander("💭 Ход рассуждений", expanded=False):
+                    with st.expander(f"💭 {t('chat.thoughts')}", expanded=False):
                         st.markdown(f'<div class="thoughts-container">{thoughts}</div>', unsafe_allow_html=True)
 
                 st.markdown(content)
@@ -524,7 +517,6 @@ if page == t("nav.chat"):
                     </div>
                     """, unsafe_allow_html=True)
 
-    # Поле ввода
     user_input = st.chat_input(t("chat.input_placeholder"))
     if user_input:
         with st.chat_message("user", avatar="👤"):
@@ -558,7 +550,7 @@ if page == t("nav.chat"):
 
                     elif etype == "tool_result":
                         with tools_container:
-                            with st.expander(f"↳ {event['name']} (Result)", expanded=False):
+                            with st.expander(f"↳ {event['name']}", expanded=False):
                                 st.json(event["result"])
 
                     elif etype == "done":
@@ -574,7 +566,7 @@ if page == t("nav.chat"):
             answer_placeholder.empty()
 
             if final_thoughts:
-                with st.expander("💭 Ход рассуждений", expanded=False):
+                with st.expander(f"💭 {t('chat.thoughts')}", expanded=False):
                     st.markdown(f'<div class="thoughts-container">{final_thoughts}</div>', unsafe_allow_html=True)
 
             st.markdown(final_display)
@@ -583,10 +575,10 @@ if page == t("nav.chat"):
 
 
 # ═══════════════════════════════════════════════════════════════
-# 2. КОНСТРУКТОР АГЕНТОВ (Blob Styling & Presets)
+# 2. КОНСТРУКТОР АГЕНТОВ
 # ═══════════════════════════════════════════════════════════════
 elif page == t("nav.agents"):
-    page_header(t("agents.title"), "Кастомные ИИ-агенты с органическими аватарами-кляксами", "Grok Mode")
+    page_header(t("agents.title"), t("agents.subtitle"), t("agents.status"))
 
     col_agents, col_builder = st.columns([1, 1], gap="large")
 
@@ -595,9 +587,18 @@ elif page == t("nav.agents"):
         all_curr_agents = list_agents()
 
         for a in all_curr_agents:
-            badge_type = f'<span style="color:#6ee7b7; font-size:0.7rem;">● {t("agents.builtin")}</span>' if a.is_builtin else f'<span style="color:#a78bfa; font-size:0.7rem;">● {t("agents.custom")}</span>'
-            tools_str = "Все инструменты (*)" if "*" in a.allowed_tools else f"{len(a.allowed_tools)} {t('agents.tools_count')}"
+            badge_type = (
+                f'<span style="color:#6ee7b7; font-size:0.7rem;">● {t("agents.builtin")}</span>'
+                if a.is_builtin
+                else f'<span style="color:#a78bfa; font-size:0.7rem;">● {t("agents.custom")}</span>'
+            )
+            tools_str = (
+                t("agents.all_tools")
+                if "*" in a.allowed_tools
+                else f"{len(a.allowed_tools)} {t('agents.tools_count')}"
+            )
             card_blob_svg = generate_blob_svg(a.blob_preset, a.blob_palette, size=44)
+            desc_text = _agent_desc_localized(a)
 
             st.markdown(f"""
             <div class="v-card">
@@ -611,11 +612,11 @@ elif page == t("nav.agents"):
                                 <span style="font-weight:700; font-size:1.02rem; color:#fff;">{a.name}</span>
                                 <span style="font-family:'JetBrains Mono',monospace; font-size:0.72rem; color:#71717a; background:rgba(255,255,255,0.05); padding:2px 6px; border-radius:4px;">{a.id}</span>
                             </div>
-                            <div style="font-size:0.8rem; color:#a1a1aa; margin:4px 0 6px 0;">{a.description or 'Нет описания.'}</div>
+                            <div style="font-size:0.8rem; color:#a1a1aa; margin:4px 0 6px 0;">{desc_text}</div>
                             <div style="display:flex; gap:16px; font-size:0.72rem; color:#71717a; font-family:'JetBrains Mono',monospace;">
                                 <span>{tools_str}</span>
                                 <span>{badge_type}</span>
-                                <span>{a.blob_preset}</span>
+                                <span>{t(f"shape.{a.blob_preset}")}</span>
                             </div>
                         </div>
                     </div>
@@ -631,20 +632,13 @@ elif page == t("nav.agents"):
     with col_builder:
         st.markdown(f"### {t('agents.create_new')}")
 
-        # ─── ВЫБОР ФОРМЫ И ПАЛИТРЫ ВНЕ ФОРМЫ (для мгновенного превью!) ───
         c_shape, c_palette = st.columns(2)
         with c_shape:
             preset_options = list(BLOB_PATHS.keys())
             new_preset = st.selectbox(
                 t("agents.shape"),
                 options=preset_options,
-                format_func=lambda x: {
-                    "plasma": "Плазма (Волна)",
-                    "liquid": "Амёба (Жидкость)",
-                    "crystal": "Кристалл (Грани)",
-                    "droplet": "Капля (Комета)",
-                    "nucleus": "Ядро (Атом)",
-                }.get(x, x),
+                format_func=lambda x: t(f"shape.{x}"),
                 key="builder_preset_select",
             )
         with c_palette:
@@ -652,22 +646,15 @@ elif page == t("nav.agents"):
             new_palette = st.selectbox(
                 t("agents.palette"),
                 options=palette_options,
-                format_func=lambda x: {
-                    "cyber_indigo": "🟣 Cyber Indigo",
-                    "neon_cyan": "🔵 Neon Cyan",
-                    "toxic_lime": "🟢 Toxic Lime",
-                    "solar_amber": "🟠 Solar Amber",
-                    "deep_void": "🔴 Crimson Void",
-                }.get(x, x),
+                format_func=lambda x: t(f"palette.{x}"),
                 key="builder_palette_select",
             )
 
-        # Живое превью аватара (обновляется мгновенно при смене селектов выше)
         preview_svg = generate_blob_svg(new_preset, new_palette, size=96)
         st.markdown(f"""
         <div class="v-card" style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:16px;">
             <div style="font-size:0.72rem; color:#71717a; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">
-                {t("agents.preview")}: {new_preset} + {new_palette}
+                {t("agents.preview")}: {t(f"shape.{new_preset}")}
             </div>
             <div class="live-blob" style="width:96px; height:96px;">
                 {preview_svg}
@@ -675,13 +662,12 @@ elif page == t("nav.agents"):
         </div>
         """, unsafe_allow_html=True)
 
-        # ─── ОСТАЛЬНЫЕ ПОЛЯ ВНУТРИ ФОРМЫ ───
         with st.form("agent_builder_form"):
-            new_id = st.text_input(t("agents.id"), placeholder="e.g. devops_bot").strip().lower()
-            new_name = st.text_input(t("agents.name"), placeholder="e.g. DevOps Engineer")
-            new_desc = st.text_input(t("agents.desc"), placeholder="Автоматизация деплоя и работы с логами")
+            new_id = st.text_input(t("agents.id"), placeholder=t("agents.id_placeholder")).strip().lower()
+            new_name = st.text_input(t("agents.name"), placeholder=t("agents.name_placeholder"))
+            new_desc = st.text_input(t("agents.desc"), placeholder=t("agents.desc_placeholder"))
 
-            new_temp = st.slider("Креативность (Temperature)", min_value=0.0, max_value=1.5, value=0.5, step=0.1)
+            new_temp = st.slider(t("agents.temp"), min_value=0.0, max_value=1.5, value=0.5, step=0.1)
             new_prompt = st.text_area(t("agents.prompt"), value=SYSTEM_PROMPT, height=150)
 
             all_tools = sorted(list(TOOL_REGISTRY.keys()))
@@ -694,9 +680,9 @@ elif page == t("nav.agents"):
             submit_agent = st.form_submit_button(f"✨ {t('agents.save')}", use_container_width=True)
             if submit_agent:
                 if not new_id or not new_name:
-                    st.error("Пожалуйста, заполните ID и Имя агента.")
+                    st.error(t("agents.err_id_name"))
                 elif not selected_tools:
-                    st.error("Выберите хотя бы один доступный инструмент.")
+                    st.error(t("agents.err_tools"))
                 else:
                     new_agent = AgentConfig(
                         id=new_id,
@@ -711,7 +697,7 @@ elif page == t("nav.agents"):
                     )
                     save_agent(new_agent)
                     get_agent_avatar_path(new_id, new_preset, new_palette)
-                    st.success(f"Агент '{new_name}' успешно создан!")
+                    st.success(t("agents.created_ok", name=new_name))
                     st.rerun()
 
 
@@ -719,7 +705,7 @@ elif page == t("nav.agents"):
 # 3. ПАМЯТЬ
 # ═══════════════════════════════════════════════════════════════
 elif page == t("nav.memory"):
-    page_header(t("memory.title"), "Двухуровневая долговременная память ассистента", "Storage")
+    page_header(t("memory.title"), t("memory.subtitle"), t("memory.status"))
     m_col1, m_col2 = st.columns([1, 1], gap="large")
 
     with m_col1:
@@ -740,8 +726,8 @@ elif page == t("nav.memory"):
 
         with st.form("add_memory_fact", clear_on_submit=True):
             st.markdown(t("memory.add_fact"))
-            k_input = st.text_input(t("memory.add_key"), placeholder="user_preferred_stack")
-            v_input = st.text_area(t("memory.add_value"), placeholder="Python, FastAPI, PyTorch", height=70)
+            k_input = st.text_input(t("memory.add_key"), placeholder=t("memory.add_key_placeholder"))
+            v_input = st.text_area(t("memory.add_value"), placeholder=t("memory.add_value_placeholder"), height=70)
             if st.form_submit_button(f"💾 {t('memory.save')}", use_container_width=True):
                 if k_input and v_input:
                     save_memory(k_input, v_input)
@@ -783,7 +769,7 @@ elif page == t("nav.memory"):
 # 4. ФОНОВЫЕ ЗАДАЧИ
 # ═══════════════════════════════════════════════════════════════
 elif page == t("nav.tasks"):
-    page_header(t("tasks.title"), "Периодические проверки и уведомления планировщика", t("tasks.status"))
+    page_header(t("tasks.title"), t("tasks.subtitle"), t("tasks.status"))
     jobs = _load_jobs()
     if not jobs:
         st.info(t("tasks.empty_title"))
@@ -795,14 +781,14 @@ elif page == t("nav.tasks"):
                 <div class="v-card">
                     <div style="font-weight:600; color:#fff; font-size:1rem;">{j.get('name', 'Task')}</div>
                     <div style="font-size:0.75rem; color:#71717a; font-family:'JetBrains Mono',monospace; margin-top:4px;">
-                        Каждые {j.get('minutes')} мин · тип: {j.get('task_type', 'ai_task')} · ID: {j.get('id')}
+                        {t('tasks.every')} {j.get('minutes')} {t('tasks.min')} · {t('tasks.type')}: {j.get('task_type', 'ai_task')} · ID: {j.get('id')}
                     </div>
-                    <div style="font-size:0.82rem; color:#a1a1aa; margin-top:6px;">Промпт: <i>{j.get('prompt', '')}</i></div>
+                    <div style="font-size:0.82rem; color:#a1a1aa; margin-top:6px;">{t('tasks.prompt_label')}: <i>{j.get('prompt', '')}</i></div>
                 </div>
                 """, unsafe_allow_html=True)
             with c_act:
                 st.markdown("<div style='height: 0.8rem;'></div>", unsafe_allow_html=True)
-                if st.button("Удалить", key=f"del_job_{j['id']}", use_container_width=True):
+                if st.button(t("tasks.delete"), key=f"del_job_{j['id']}", use_container_width=True):
                     remove_scheduled_task(j["id"])
                     st.rerun()
 
@@ -811,7 +797,7 @@ elif page == t("nav.tasks"):
 # 5. ТОКЕНЫ И РАСХОД
 # ═══════════════════════════════════════════════════════════════
 elif page == t("nav.tokens"):
-    page_header(t("tokens.title"), "Локальная аналитика потребления и стоимости токенов", "API Analytics")
+    page_header(t("tokens.title"), t("tokens.subtitle"), t("tokens.status"))
     from core.usage_tracker import get_stats as usage_stats, reset_usage
     u_data = usage_stats()
     today = u_data["today"]
@@ -864,7 +850,7 @@ elif page == t("nav.tokens"):
 # 6. СТАТУС СИСТЕМЫ
 # ═══════════════════════════════════════════════════════════════
 elif page == t("nav.status"):
-    page_header(t("status.title"), "Телеметрия локального ПК (CPU, RAM, GPU, Disks)", "Telemetry")
+    page_header(t("status.title"), t("status.subtitle"), t("status.status"))
     sys_info = get_system_info()
     c_cpu, c_ram, c_os = st.columns(3)
 
@@ -899,7 +885,7 @@ elif page == t("nav.status"):
         """, unsafe_allow_html=True)
 
     st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
-    st.markdown("### GPU Status")
+    st.markdown(f"### {t('status.gpu')}")
     try:
         gpu_info = get_gpu_info()
         if gpu_info.get("success") and gpu_info.get("gpus"):
@@ -924,7 +910,7 @@ elif page == t("nav.status"):
 # 7. ЛОГИ
 # ═══════════════════════════════════════════════════════════════
 elif page == t("nav.logs"):
-    page_header(t("logs.title"), "Журнал работы ассистента и вызовов инструментов", "Debug")
+    page_header(t("logs.title"), t("logs.subtitle"), t("logs.status"))
     if not LOG_FILE.exists():
         st.info(t("logs.empty_title"))
     else:

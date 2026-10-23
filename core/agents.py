@@ -1,7 +1,7 @@
 # core/agents.py
 """
-Менеджер агентов Vanta (в стиле Grok Bots / Custom Personas).
-Поддерживает процедурные кляксы (Blobs), изолированные промпты и списки инструментов.
+Менеджер агентов Vanta (Custom Personas).
+Поддерживает процедурные SVG-кляксы (Blobs), изолированные промпты и списки инструментов.
 """
 import json
 import threading
