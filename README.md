@@ -55,29 +55,29 @@ vanta/
 ├── config.py              # Environment & directory configuration
 ├── pyproject.toml         # Package & pytest configuration
 └── requirements.txt       # Project dependencies
-
+```
 🚀 Quick Start
 1. Clone the repository
-Bash
-
+```Bash
 git clone [https://github.com/YOUR_USERNAME/vanta.git](https://github.com/YOUR_USERNAME/vanta.git)
 cd vanta
+```
 
 2. Create a virtual environment & install dependencies
-PowerShell
+```PowerShell
 
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-
+```
 3. Configure environment variables
 
 Create a .env file in the root directory:
-Фрагмент кода
+```
 
 # Required
 OPENAI_API_KEY=sk-your-openai-api-key
-OPENAI_BASE_URL=[https://api.openai.com/v1](https://api.openai.com/v1)
+OPENAI_BASE_URL=https://api.openai.com/v1
 
 # Models (optional, defaults shown)
 MAIN_MODEL=gpt-5-mini
@@ -90,19 +90,19 @@ SANDBOX_DIR=D:\Vanta_Sandbox
 # Telegram Bot (optional — set TELEGRAM_TOKEN=disabled to turn off)
 TELEGRAM_TOKEN=disabled
 ALLOWED_USER_ID=0
-
+```
 💻 Usage
 Launch the Web Dashboard (Recommended)
-PowerShell
+```PowerShell
 
 streamlit run interfaces/dashboard.py
-
+```
 Gives you access to the Chat, Agent Builder (Grok Mode), Memory Manager, Background Tasks, Token Analytics, System Telemetry, and Live Logs.
 Launch the CLI + Background Telegram Bot
-PowerShell
+```PowerShell
 
 python interfaces/main.py
-
+```
 Telegram Bot Commands
 
 When TELEGRAM_TOKEN and ALLOWED_USER_ID are configured in .env, the bot supports:
@@ -123,9 +123,9 @@ When TELEGRAM_TOKEN and ALLOWED_USER_ID are configured in .env, the bot supports
 
 The test suite verifies path traversal protection, .env and source code write-protection, command execution rules, Pydantic tool argument validation, and agent tool filtering:
 PowerShell
-
+```
 python -m pytest -v
-
+```
 📄 License
 
 This project is licensed under the MIT License.
