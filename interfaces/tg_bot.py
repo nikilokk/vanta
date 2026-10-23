@@ -7,22 +7,21 @@ from telegram.ext import (
 )
 
 from config import TELEGRAM_TOKEN, ALLOWED_USER_ID
+from core.agents import list_agents
 from core.logger import get_logger
 
 logger = get_logger(__name__)
 
-# === ГЛОБАЛЬНОЕ СОСТОЯНИЕ ===
 _bot_app = None
 _bot_loop = None
+_tg_current_agent = "default"
 
 
 def _check_access(update: Update) -> bool:
     return update.effective_user.id == ALLOWED_USER_ID
 
 
-# === ОТПРАВКА СООБЩЕНИЙ ===
 async def send_telegram_notification(text: str):
-    """Асинхронная отправка — используется из async-контекста."""
     if not _bot_app or not ALLOWED_USER_ID:
         logger.warning("TG: невозможно отправить — бот не запущен")
         return
@@ -33,7 +32,6 @@ async def send_telegram_notification(text: str):
 
 
 def send_telegram_notification_sync(text: str):
-    """Синхронная отправка — используется из scheduler/других потоков."""
     if not _bot_loop or not _bot_app:
         logger.warning("TG: loop бота недоступен")
         return
@@ -47,7 +45,6 @@ def send_telegram_notification_sync(text: str):
         logger.error(f"TG sync send error: {e}")
 
 
-# === КОМАНДЫ ===
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _check_access(update):
         await update.message.reply_text("⛔ Доступ запрещён.")
@@ -65,13 +62,38 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📋 *Доступные команды:*\n\n"
         "/start — приветствие\n"
-        "/help — эта справка\n"
+        "/agent — переключение профиля агента\n"
         "/clear — очистить контекст диалога\n"
         "/memory — показать память\n"
         "/jobs — список фоновых задач\n"
         "/status — состояние системы",
         parse_mode="Markdown"
     )
+
+
+async def cmd_agent(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _check_access(update):
+        return
+    global _tg_current_agent
+
+    args = context.args
+    agents = list_agents()
+
+    if not args:
+        lines = [f"🤖 *Текущий агент:* `{_tg_current_agent}`\n\n*Доступные агенты:*"]
+        for a in agents:
+            tools_info = "all" if "*" in a.allowed_tools else f"{len(a.allowed_tools)} tools"
+            lines.append(f"• `{a.id}` — {a.name} ({tools_info})")
+        lines.append("\n_Переключить:_ `/agent <id>`")
+        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        return
+
+    target_id = args[0].lower().strip()
+    if any(a.id == target_id for a in agents):
+        _tg_current_agent = target_id
+        await update.message.reply_text(f"✔ Агент переключен на: `{target_id}`", parse_mode="Markdown")
+    else:
+        await update.message.reply_text(f"❌ Агент `{target_id}` не найден.")
 
 
 async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -104,7 +126,6 @@ async def cmd_memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append("🧠 *Факты:* пока пусто")
 
     lines.append(f"\n💬 *Векторная память:* {vec_count} диалогов сохранено")
-
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
@@ -153,12 +174,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user_text = update.message.text
-    status_msg = await update.message.reply_text("🧠 Думаю...")
+    status_msg = await update.message.reply_text(f"🧠 [{_tg_current_agent}] Думаю...")
 
     try:
         from core.brain import ask_ai
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(None, ask_ai, user_text)
+        result = await loop.run_in_executor(
+            None,
+            lambda: ask_ai(user_text, agent_id=_tg_current_agent),
+        )
 
         response_text = result["display"] if isinstance(result, dict) else str(result)
 
@@ -174,12 +198,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await status_msg.edit_text(f"❌ Ошибка: {e}")
 
 
-# === ЗАПУСК БОТА ===
 def _run_bot():
-    """Внутренняя функция — запускается в фоновом потоке."""
     global _bot_app, _bot_loop
 
-    # Проверяем, что токен задан (учитываем "disabled" из .env)
     if (
         not TELEGRAM_TOKEN
         or TELEGRAM_TOKEN in ("disabled", "none", "")
@@ -197,6 +218,7 @@ def _run_bot():
 
         app.add_handler(CommandHandler("start", cmd_start))
         app.add_handler(CommandHandler("help", cmd_help))
+        app.add_handler(CommandHandler("agent", cmd_agent))
         app.add_handler(CommandHandler("clear", cmd_clear))
         app.add_handler(CommandHandler("memory", cmd_memory))
         app.add_handler(CommandHandler("jobs", cmd_jobs))
@@ -216,14 +238,12 @@ def _run_bot():
 
 
 def start_telegram_bot():
-    """Запускает бота в фоновом daemon-потоке."""
     thread = threading.Thread(target=_run_bot, daemon=True, name="tg-bot")
     thread.start()
     logger.info("TG: поток бота запущен")
 
 
 def run_telegram_bot():
-    """Блокирующий запуск (для отдельного использования)."""
     _run_bot()
 
 

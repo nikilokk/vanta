@@ -14,11 +14,14 @@ LIBS_DIR = BASE_DIR / "libs"
 DATA_DIR.mkdir(exist_ok=True)
 LIBS_DIR.mkdir(exist_ok=True)
 
-SANDBOX_DIR = Path(r"D:\Vanta_Sandbox")
+# Песочница: по умолчанию D:\Vanta_Sandbox (если диск D: есть) или data/sandbox
+_default_sandbox = Path(r"D:\Vanta_Sandbox") if Path("D:\\").exists() else (DATA_DIR / "sandbox")
+SANDBOX_DIR = Path(os.getenv("SANDBOX_DIR", str(_default_sandbox))).resolve()
+SANDBOX_DIR.mkdir(parents=True, exist_ok=True)
 
-# === МОДЕЛИ (всё через OpenAI API) ===
-MAIN_MODEL = os.getenv("MAIN_MODEL", "gpt-5-mini")          # основной чат
-VISION_MODEL = os.getenv("VISION_MODEL", "gpt-4o-mini")     # анализ скриншотов
+# === МОДЕЛИ ===
+MAIN_MODEL = os.getenv("MAIN_MODEL", "gpt-5-mini")
+VISION_MODEL = os.getenv("VISION_MODEL", "gpt-4o-mini")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
 
 # === API ===

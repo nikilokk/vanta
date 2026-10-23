@@ -1,14 +1,17 @@
 # core/brain.py
 """
-Ядро Vanta. Вся логика общения с LLM через OpenAI API.
+Ядро Vanta. Потокобезопасная реализация цикла общения с LLM
+с поддержкой профилей агентов (Grok Bots mode).
 """
 import json
 import os
 import re
+import threading
 import time
 
 from rich.console import Console
 
+from core.agents import get_agent, filter_tools_for_agent, AgentConfig
 from core.logger import get_logger
 from core.memory import forget_memory, recall_memory, save_memory
 from core.prompts import SYSTEM_PROMPT
@@ -35,22 +38,19 @@ from tools import (
     discord_open, discord_send,
     spotify_play, twitch_search,
 )
+from tools.web import fetch_webpage
 
 logger = get_logger(__name__)
 console = Console()
 
-
-# ═══════════════════════════════════════════════════════════════
-# КОНСТАНТЫ
-# ═══════════════════════════════════════════════════════════════
 MAX_STEPS = 20
 MAX_SECONDS = 300
 MAX_HISTORY = 15
+MAX_FACTS_IN_PROMPT = 30
+
+_brain_lock = threading.RLock()
 
 
-# ═══════════════════════════════════════════════════════════════
-# ОБЁРТКИ ДЛЯ API-ОТВЕТОВ
-# ═══════════════════════════════════════════════════════════════
 class _Function:
     def __init__(self, f: dict):
         self.name = f["name"]
@@ -81,9 +81,6 @@ def _wrap_api_response(resp_dict: dict) -> _Response:
     return _Response(resp_dict)
 
 
-# ═══════════════════════════════════════════════════════════════
-# ВЕКТОРНАЯ ПАМЯТЬ (обёртки)
-# ═══════════════════════════════════════════════════════════════
 def _remember_conversation(summary: str):
     return save_conversation(user_message=summary, assistant_response="(запомнено)")
 
@@ -99,9 +96,6 @@ def _search_memory(query: str):
     return {"success": True, "memories": "\n\n".join(lines)}
 
 
-# ═══════════════════════════════════════════════════════════════
-# РЕЕСТР ИНСТРУМЕНТОВ
-# ═══════════════════════════════════════════════════════════════
 TOOL_REGISTRY = {
     "search_files": search_files,
     "read_file": read_file,
@@ -124,6 +118,7 @@ TOOL_REGISTRY = {
     "open_program": open_program,
     "open_website": open_website,
     "web_search": web_search,
+    "fetch_webpage": fetch_webpage,
     "search_username_osint": search_username_osint,
     "get_current_datetime": get_current_datetime,
     "save_memory": save_memory,
@@ -176,13 +171,14 @@ def execute_tool(name: str, arguments: dict) -> dict:
     if not func:
         return {"success": False, "error": f"Unknown tool: {name}"}
 
+    if not isinstance(arguments, dict):
+        return {
+            "success": False,
+            "error": f"Аргументы должны быть объектом, получено {type(arguments).__name__}",
+        }
+
     schema = TOOL_SCHEMAS.get(name)
     if schema:
-        if not isinstance(arguments, dict):
-            return {
-                "success": False,
-                "error": f"Аргументы должны быть объектом, получено {type(arguments).__name__}",
-            }
         try:
             validated = schema(**arguments)
             arguments = validated.model_dump()
@@ -199,23 +195,20 @@ def execute_tool(name: str, arguments: dict) -> dict:
     except TypeError as e:
         return {"success": False, "error": f"Неверные аргументы: {e}"}
     except Exception as e:
+        logger.error(f"Tool '{name}' failed: {e}")
         return {"success": False, "error": f"Tool failed: {e}"}
 
 
-# ═══════════════════════════════════════════════════════════════
-# ИСТОРИЯ
-# ═══════════════════════════════════════════════════════════════
 chat_history: list = [{"role": "system", "content": SYSTEM_PROMPT}]
 
 
 def clear_chat_history():
     global chat_history
-    chat_history = [{"role": "system", "content": SYSTEM_PROMPT}]
+    with _brain_lock:
+        chat_history.clear()
+        chat_history.append({"role": "system", "content": SYSTEM_PROMPT})
 
 
-# ═══════════════════════════════════════════════════════════════
-# ПОСТ-ОБРАБОТКА ОТВЕТА
-# ═══════════════════════════════════════════════════════════════
 def _parse_thoughts(raw: str):
     if not raw:
         return "", ""
@@ -229,19 +222,9 @@ def _parse_thoughts(raw: str):
 
 
 def _fix_code_fences(text: str) -> str:
-    """
-    Пост-обработка ответа: чинит сломанные code fences.
-
-    1. Если `​`` открыт, но не закрыт — добавляет закрывающий.
-    2. Если перед первым `​`` есть голый код (def/import/class/from) —
-       заворачивает его в блок.
-    3. Обрабатывает случай "python import ..." без открывающих `​``.
-    """
     if not text:
         return text
 
-    # ── Случай 1: "python\nimport ..." без открывающего fence ──
-    # Модель иногда пишет "python" как префикс вместо ​```python
     text = re.sub(
         r"^python\s+((?:import |from |def |class |async def )[^\n]+)",
         r"```python\n\1",
@@ -249,12 +232,9 @@ def _fix_code_fences(text: str) -> str:
         flags=re.MULTILINE,
     )
 
-    # ── Случай 2: Баланс закрывающих ──
-    # Если ``` нечётное количество — добавляем закрывающий в конец
     if text.count("```") % 2 == 1:
         text = text.rstrip() + "\n```"
 
-    # ── Случай 3: голый код ПЕРЕД первым fence ──
     if "```" in text:
         first_fence = text.find("```")
         before = text[:first_fence]
@@ -265,10 +245,7 @@ def _fix_code_fences(text: str) -> str:
 
             for i, line in enumerate(lines):
                 stripped = line.strip()
-                if stripped.startswith((
-                    "def ", "import ", "class ", "from ",
-                    "async def ", "@",
-                )):
+                if stripped.startswith(("def ", "import ", "class ", "from ", "async def ", "@")):
                     code_start_idx = i
                     break
 
@@ -281,127 +258,70 @@ def _fix_code_fences(text: str) -> str:
                 else:
                     new_block = f"```python\n{code_part}\n```\n"
 
-                # Собираем заново: новый блок + оставшийся текст
                 rest = text[first_fence + 3:]
-                # Если в rest сразу идёт язык (python, bash и т.д.) — 
-                # мы его "съели" при первом find, теперь склеиваем корректно
                 text = new_block + rest
 
     return text
 
 
-def _get_memory_context(user_message: str) -> str:
-    parts = []
+def _get_memory_context() -> str:
     try:
         facts = recall_memory()
         if facts.get("success") and facts.get("all_memories"):
-            lines = [f"- {k}: {v}" for k, v in facts["all_memories"].items()]
+            items = list(facts["all_memories"].items())[:MAX_FACTS_IN_PROMPT]
+            lines = [f"- {k}: {v}" for k, v in items]
             if lines:
-                parts.append("**Факты:**\n" + "\n".join(lines))
+                return "**Известные факты о пользователе:**\n" + "\n".join(lines)
     except Exception as e:
         logger.error(f"Recall facts failed: {e}")
-
-    if user_message and len(user_message.strip()) > 10:
-        try:
-            result = search_conversations(user_message, n_results=2)
-            if result.get("success") and result.get("results"):
-                lines = [f"- {r['text'][:400]}" for r in result["results"]]
-                if lines:
-                    parts.append("**Похожие разговоры:**\n" + "\n".join(lines))
-        except Exception as e:
-            logger.error(f"Recall dialogs failed: {e}")
-
-    return "\n\n".join(parts)
+    return ""
 
 
-def _build_messages(user_message: str) -> list:
-    system_msg = {"role": "system", "content": SYSTEM_PROMPT}
+def _get_role(m):
+    if isinstance(m, dict):
+        return m.get("role")
+    return getattr(m, "role", None)
 
-    memory = _get_memory_context(user_message)
+
+def _build_messages(agent: AgentConfig) -> list:
+    from core.settings import get_setting
+
+    system_msg = {"role": "system", "content": agent.system_prompt}
+    lang = get_setting("lang", "ru")
+
+    lang_instructions = {
+        "en": "Always respond in ENGLISH, regardless of the language of tools. Keep Vanta's tone: friendly, concise, human-like.",
+        "uk": "Завжди відповідай УКРАЇНСЬКОЮ мовою, навіть якщо інструменти повернули дані англійською. Зберігай тон Vanta: дружній, лаконічний.",
+        "pl": "Zawsze odpowiadaj po POLSKU, nawet jeśli narzędzia zwróciły dane po angielsku. Zachowaj ton Vanta: przyjazny, zwięzły.",
+        "ru": "Всегда отвечай на РУССКОМ языке, даже если инструменты вернули данные на английском. Сохраняй тон Vanta: дружелюбный, лаконичный.",
+    }
+    system_msg["content"] += f"\n\n## RESPONSE LANGUAGE\n{lang_instructions.get(lang, lang_instructions['ru'])}"
+
+    memory = _get_memory_context()
     if memory:
-        system_msg["content"] += f"\n\n## ЧТО ТЫ ЗНАЕШЬ О ПОЛЬЗОВАТЕЛЕ\n{memory}"
+        system_msg["content"] += f"\n\n## ПАМЯТЬ О ПОЛЬЗОВАТЕЛЕ\n{memory}"
 
-    return [system_msg] + chat_history[1:][-MAX_HISTORY:]
+    with _brain_lock:
+        history = list(chat_history[1:])
 
+    sliced = history[-MAX_HISTORY:]
+    while sliced and _get_role(sliced[0]) == "tool":
+        sliced = sliced[1:]
 
-def _auto_save(message: str, response: str):
-    if not message or len(message.strip()) < 5:
-        return
-    try:
-        save_conversation(user_message=message, assistant_response=response)
-    except Exception as e:
-        logger.error(f"Auto-save failed: {e}")
+    return [system_msg] + sliced
 
 
-# ═══════════════════════════════════════════════════════════════
-# ВЫЗОВ API
-# ═══════════════════════════════════════════════════════════════
-def _call_api(messages: list):
+def _call_api(messages: list, agent: AgentConfig):
     from core.api_client import chat_api
-    console.print("[dim cyan]→ OpenAI[/dim cyan]")
-    result = chat_api(messages=messages, tools=TOOLS)
+    agent_tools = filter_tools_for_agent(agent, TOOLS)
+    console.print(f"[dim cyan]→ OpenAI [{agent.name}] (tools: {len(agent_tools)})[/dim cyan]")
+    result = chat_api(messages=messages, tools=agent_tools if agent_tools else None)
     return _wrap_api_response(result)
-
-
-# ═══════════════════════════════════════════════════════════════
-# ОБРАБОТКА TOOL CALLS
-# ═══════════════════════════════════════════════════════════════
-def _run_tool_calls(tool_calls, screenshots_to_cleanup: list) -> list:
-    tool_messages = []
-
-    for idx, tc in enumerate(tool_calls):
-        name = tc.function.name
-        args = tc.function.arguments
-        tc_id = getattr(tc, "id", None) or f"call_{idx}_{int(time.time() * 1000)}"
-
-        try:
-            console.print(f"\n[bold yellow]⚡[/bold yellow] [bold white]{name}[/bold white]")
-        except Exception:
-            pass
-
-        if isinstance(args, str):
-            try:
-                args = json.loads(args)
-            except json.JSONDecodeError as e:
-                tool_messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc_id,
-                    "content": json.dumps(
-                        {"success": False, "error": f"Invalid JSON: {e}"},
-                        ensure_ascii=False,
-                    ),
-                })
-                continue
-
-        try:
-            result = execute_tool(name, args)
-        except Exception as e:
-            logger.error(f"Tool {name} critical error: {e}")
-            result = {"success": False, "error": f"Критическая ошибка: {e}"}
-
-        try:
-            console.print(f"[bold green]✔[/bold green] [dim]{str(result)[:200]}[/dim]")
-        except Exception:
-            pass
-
-        if name in ("take_screenshot", "analyze_screenshot"):
-            if isinstance(result, dict) and result.get("success"):
-                img = result.get("image_path")
-                if img:
-                    screenshots_to_cleanup.append(img)
-
-        tool_messages.append({
-            "role": "tool",
-            "tool_call_id": tc_id,
-            "content": json.dumps(result, ensure_ascii=False),
-        })
-
-    return tool_messages
 
 
 def _cleanup_screenshots(paths: list):
     for p in paths:
-        if os.path.exists(p):
+        if p and os.path.exists(p):
             try:
                 os.remove(p)
             except Exception:
@@ -412,89 +332,14 @@ def _error_response(text: str) -> dict:
     return {"display": text, "speech": text, "thoughts": ""}
 
 
-# ═══════════════════════════════════════════════════════════════
-# ask_ai (CLI)
-# ═══════════════════════════════════════════════════════════════
-def ask_ai(message: str) -> dict:
-    global chat_history
-    chat_history.append({"role": "user", "content": message})
-
-    start = time.time()
-    screenshots = []
-
-    try:
-        for step in range(1, MAX_STEPS + 1):
-            if time.time() - start > MAX_SECONDS:
-                return _error_response(f"Превышено время ({MAX_SECONDS} сек).")
-
-            messages = _build_messages(message)
-
-            try:
-                response = _call_api(messages)
-            except Exception as e:
-                return _error_response(f"Ошибка API: {e}")
-
-            if not response.message.tool_calls:
-                raw = (response.message.content or "").strip()
-                display, thoughts = _parse_thoughts(raw)
-
-                # Автопочинка code fences
-                display = _fix_code_fences(display)
-
-                if not display.strip():
-                    display = "✔ Готово."
-
-                chat_history.append({
-                    "role": "assistant",
-                    "content": display,
-                    "thoughts": thoughts,
-                    "usage": response.usage,
-                })
-                _auto_save(message, display)
-                return {
-                    "display": display,
-                    "speech": display,
-                    "thoughts": thoughts,
-                    "usage": response.usage,
-                }
-
-            formatted = []
-            for idx, tc in enumerate(response.message.tool_calls):
-                formatted.append({
-                    "id": tc.id or f"call_{idx}_{int(time.time()*1000)}",
-                    "type": "function",
-                    "function": {
-                        "name": tc.function.name,
-                        "arguments": tc.function.arguments,
-                    },
-                })
-
-            chat_history.append({
-                "role": "assistant",
-                "content": response.message.content or "",
-                "tool_calls": formatted,
-            })
-
-            tool_msgs = _run_tool_calls(response.message.tool_calls, screenshots)
-            chat_history.extend(tool_msgs)
-
-        return _error_response("Слишком много шагов.")
-
-    finally:
-        _cleanup_screenshots(screenshots)
-
-
-# ═══════════════════════════════════════════════════════════════
-# ask_ai_stream (дашборд)
-# ═══════════════════════════════════════════════════════════════
-def ask_ai_stream(message: str):
-    global chat_history
-    chat_history.append({"role": "user", "content": message})
+def ask_ai_stream(message: str, agent_id: str = "default"):
+    agent = get_agent(agent_id)
+    with _brain_lock:
+        chat_history.append({"role": "user", "content": message})
 
     start = time.time()
     screenshots = []
     api_notice_shown = False
-
     total_usage = {"prompt": 0, "cached": 0, "completion": 0, "total": 0, "cost": 0.0}
 
     try:
@@ -508,14 +353,14 @@ def ask_ai_stream(message: str):
                 }
                 return
 
-            messages = _build_messages(message)
+            messages = _build_messages(agent)
 
             if not api_notice_shown:
-                yield {"type": "answer", "text": "🌐 OpenAI...\n\n"}
+                yield {"type": "answer", "text": f"🌐 OpenAI [{agent.name}]...\n\n"}
                 api_notice_shown = True
 
             try:
-                response = _call_api(messages)
+                response = _call_api(messages, agent)
             except Exception as e:
                 logger.error(f"API error: {e}")
                 yield {
@@ -526,7 +371,6 @@ def ask_ai_stream(message: str):
                 }
                 return
 
-            # Накопление usage
             if getattr(response, "usage", None):
                 for k in ("prompt", "cached", "completion", "total"):
                     total_usage[k] += response.usage.get(k, 0)
@@ -536,23 +380,20 @@ def ask_ai_stream(message: str):
 
             full_content = response.message.content or ""
 
-            # Финальный ответ
             if not response.message.tool_calls:
                 display, thoughts = _parse_thoughts(full_content)
-
-                # Автопочинка code fences
                 display = _fix_code_fences(display)
 
                 if not display.strip():
                     display = "✔ Готово."
 
-                chat_history.append({
-                    "role": "assistant",
-                    "content": display,
-                    "thoughts": thoughts,
-                    "usage": total_usage,
-                })
-                _auto_save(message, display)
+                with _brain_lock:
+                    chat_history.append({
+                        "role": "assistant",
+                        "content": display,
+                        "thoughts": thoughts,
+                        "usage": total_usage,
+                    })
 
                 yield {"type": "answer", "text": display}
                 yield {
@@ -563,7 +404,6 @@ def ask_ai_stream(message: str):
                 }
                 return
 
-            # Tool calls
             formatted = []
             for idx, tc in enumerate(response.message.tool_calls):
                 formatted.append({
@@ -575,18 +415,38 @@ def ask_ai_stream(message: str):
                     },
                 })
 
-            chat_history.append({
-                "role": "assistant",
-                "content": full_content or "",
-                "tool_calls": formatted,
-            })
+            with _brain_lock:
+                chat_history.append({
+                    "role": "assistant",
+                    "content": full_content or "",
+                    "tool_calls": formatted,
+                })
 
             for tc in formatted:
                 name = tc["function"]["name"]
                 args = tc["function"]["arguments"]
                 tc_id = tc["id"]
 
+                try:
+                    console.print(f"\n[bold yellow]⚡[/bold yellow] [bold white]{name}[/bold white]")
+                except Exception:
+                    pass
+
                 yield {"type": "tool_call", "name": name, "args": args}
+
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError as e:
+                        result = {"success": False, "error": f"Invalid JSON: {e}"}
+                        with _brain_lock:
+                            chat_history.append({
+                                "role": "tool",
+                                "tool_call_id": tc_id,
+                                "content": json.dumps(result, ensure_ascii=False),
+                            })
+                        yield {"type": "tool_result", "name": name, "result": result}
+                        continue
 
                 try:
                     result = execute_tool(name, args)
@@ -594,19 +454,22 @@ def ask_ai_stream(message: str):
                     logger.error(f"Tool {name} critical error: {e}")
                     result = {"success": False, "error": f"Критическая ошибка: {e}"}
 
+                try:
+                    console.print(f"[bold green]✔[/bold green] [dim]{str(result)[:200]}[/dim]")
+                except Exception:
+                    pass
+
                 yield {"type": "tool_result", "name": name, "result": result}
 
-                if name in ("take_screenshot", "analyze_screenshot"):
-                    if isinstance(result, dict) and result.get("success"):
-                        img = result.get("image_path")
-                        if img:
-                            screenshots.append(img)
+                if isinstance(result, dict) and result.get("image_path"):
+                    screenshots.append(result["image_path"])
 
-                chat_history.append({
-                    "role": "tool",
-                    "tool_call_id": tc_id,
-                    "content": json.dumps(result, ensure_ascii=False),
-                })
+                with _brain_lock:
+                    chat_history.append({
+                        "role": "tool",
+                        "tool_call_id": tc_id,
+                        "content": json.dumps(result, ensure_ascii=False),
+                    })
 
         yield {
             "type": "done",
@@ -617,3 +480,21 @@ def ask_ai_stream(message: str):
 
     finally:
         _cleanup_screenshots(screenshots)
+
+
+def ask_ai(message: str, agent_id: str = "default") -> dict:
+    final_event = None
+    for event in ask_ai_stream(message, agent_id=agent_id):
+        if event.get("type") == "done":
+            final_event = event
+
+    if not final_event:
+        return _error_response("Не удалось получить ответ.")
+
+    display = final_event.get("display", "")
+    return {
+        "display": display,
+        "speech": display,
+        "thoughts": final_event.get("thoughts", ""),
+        "usage": final_event.get("usage"),
+    }

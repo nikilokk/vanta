@@ -1,21 +1,36 @@
-# Окружение
-.venv/
-__pycache__/
-*.pyc
-.streamlit/
-
-# Секреты (ВАЖНО!)
+# === Секреты ===
 .env
+.env.local
+*.env
 
-# Данные и библиотеки
+# === Данные ===
 data/
+temp_audio/
+img/*.png
+*.log
+
+# === Библиотеки и модели ===
 libs/
 *.dll
+models/
 
-# Редакторы
+# === Кэши Python ===
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# === IDE ===
 .vscode/
 .idea/
 
-# Временные файлы
-*.log
-temp_voice_*.mp3
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Сборка и тесты ===
+*.egg-info/
+.pytest_cache/
+repomix-output*.xml

@@ -1,11 +1,12 @@
 # core/api_client.py
 """
-Единый клиент для OpenAI API.
+Единый клиент для OpenAI API с переиспользованием HTTP-соединений.
 Используется для: чата, vision, кода, эмбеддингов.
 """
 import base64
 import json
 import os
+import threading
 import time
 from typing import Optional
 
@@ -17,15 +18,25 @@ logger = get_logger(__name__)
 
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 2
+REASONING_MODELS = ("gpt-5", "o1", "o3", "o4")
 
-REASONING_MODELS = ("gpt-5", "o1", "o3")
+_client_lock = threading.Lock()
+_cached_client: Optional[OpenAI] = None
+_cached_config: tuple = ("", "")
 
 
 def _get_client() -> OpenAI:
-    return OpenAI(
-        api_key=os.getenv("OPENAI_API_KEY"),
-        base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-    )
+    """Возвращает синглтон-клиент OpenAI (пересоздаёт только при смене ключа/URL)."""
+    global _cached_client, _cached_config
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    current_cfg = (api_key, base_url)
+
+    with _client_lock:
+        if _cached_client is None or _cached_config != current_cfg:
+            _cached_client = OpenAI(api_key=api_key, base_url=base_url)
+            _cached_config = current_cfg
+        return _cached_client
 
 
 def is_api_available() -> bool:
@@ -35,13 +46,28 @@ def is_api_available() -> bool:
 def _is_retryable_error(error: Exception) -> bool:
     err_str = str(error)
     return any(code in err_str for code in [
-        "503", "429", "500", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "rate_limit"
+        "503", "429", "500", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "rate_limit", "Connection"
     ])
 
 
-# ═══════════════════════════════════════════════════════════════
-# ЧАТ (tool calling)
-# ═══════════════════════════════════════════════════════════════
+def _track_response_usage(response, model: str, include_completion: bool = True):
+    try:
+        u = getattr(response, "usage", None)
+        if not u:
+            return None
+        from core.usage_tracker import record_usage
+        ptd = getattr(u, "prompt_tokens_details", None)
+        return record_usage(
+            model=model,
+            prompt_tokens=getattr(u, "prompt_tokens", 0) or 0,
+            cached_tokens=getattr(ptd, "cached_tokens", 0) or 0 if ptd else 0,
+            completion_tokens=(getattr(u, "completion_tokens", 0) or 0) if include_completion else 0,
+        )
+    except Exception as ex:
+        logger.error(f"Usage tracking failed: {ex}")
+        return None
+
+
 def chat_api(messages: list, tools: Optional[list] = None) -> dict:
     """Отправляет запрос в OpenAI Chat Completions."""
     client = _get_client()
@@ -53,7 +79,7 @@ def chat_api(messages: list, tools: Optional[list] = None) -> dict:
     }
 
     if not any(model.startswith(p) for p in REASONING_MODELS):
-        kwargs["temperature"] = 0.85
+        kwargs["temperature"] = 0.7
 
     if tools:
         kwargs["tools"] = tools
@@ -64,28 +90,7 @@ def chat_api(messages: list, tools: Optional[list] = None) -> dict:
         try:
             response = client.chat.completions.create(**kwargs)
             msg = response.choices[0].message
-
-            # === Учёт токенов ===
-            usage_dict = None
-            try:
-                u = getattr(response, "usage", None)
-                if u:
-                    prompt_tokens = getattr(u, "prompt_tokens", 0) or 0
-                    completion_tokens = getattr(u, "completion_tokens", 0) or 0
-                    cached_tokens = 0
-                    ptd = getattr(u, "prompt_tokens_details", None)
-                    if ptd:
-                        cached_tokens = getattr(ptd, "cached_tokens", 0) or 0
-
-                    from core.usage_tracker import record_usage
-                    usage_dict = record_usage(
-                        model=model,
-                        prompt_tokens=prompt_tokens,
-                        cached_tokens=cached_tokens,
-                        completion_tokens=completion_tokens,
-                    )
-            except Exception as ex:
-                logger.error(f"Usage tracking failed: {ex}")
+            usage_dict = _track_response_usage(response, model)
 
             return {
                 "message": {
@@ -155,17 +160,23 @@ def _convert_assistant_message(m) -> dict:
 
 
 def _convert_messages(messages: list) -> list:
-    """
-    Приводит историю к формату OpenAI.
-    Выкидывает "сиротские" assistant с tool_calls без ответов.
-    """
+    """Приводит историю к формату OpenAI и удаляет разорванные пары assistant <-> tool."""
     answered_ids = set()
     for m in messages:
-        role = _get_field(m, "role")
-        if role == "tool":
+        if _get_field(m, "role") == "tool":
             tc_id = _get_field(m, "tool_call_id")
             if tc_id:
                 answered_ids.add(tc_id)
+
+    declared_ids = set()
+    for m in messages:
+        if _get_field(m, "role") == "assistant":
+            tool_calls = _get_field(m, "tool_calls")
+            if tool_calls:
+                for tc in tool_calls:
+                    tc_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+                    if tc_id:
+                        declared_ids.add(tc_id)
 
     result = []
     for m in messages:
@@ -183,10 +194,7 @@ def _convert_messages(messages: list) -> list:
             if tool_calls:
                 all_answered = True
                 for tc in tool_calls:
-                    if isinstance(tc, dict):
-                        tc_id = tc.get("id")
-                    else:
-                        tc_id = getattr(tc, "id", None)
+                    tc_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
                     if tc_id and tc_id not in answered_ids:
                         all_answered = False
                         break
@@ -199,9 +207,10 @@ def _convert_messages(messages: list) -> list:
 
         elif role == "tool":
             tool_call_id = _get_field(m, "tool_call_id")
-            if not tool_call_id:
-                logger.warning("tool-сообщение без tool_call_id — пропускаю")
+            if not tool_call_id or tool_call_id not in declared_ids:
+                logger.warning(f"Пропускаю осиротевший tool (id={tool_call_id})")
                 continue
+
             result.append({
                 "role": "tool",
                 "tool_call_id": tool_call_id,
@@ -229,9 +238,6 @@ def _parse_tool_calls(msg) -> Optional[list]:
     return parsed
 
 
-# ═══════════════════════════════════════════════════════════════
-# VISION
-# ═══════════════════════════════════════════════════════════════
 def analyze_image(image_path: str, prompt: str) -> str:
     client = _get_client()
     model = os.getenv("VISION_MODEL", "gpt-4o-mini")
@@ -253,28 +259,10 @@ def analyze_image(image_path: str, prompt: str) -> str:
         }],
         max_tokens=500,
     )
-
-    # Учёт
-    try:
-        u = getattr(response, "usage", None)
-        if u:
-            from core.usage_tracker import record_usage
-            ptd = getattr(u, "prompt_tokens_details", None)
-            record_usage(
-                model=model,
-                prompt_tokens=getattr(u, "prompt_tokens", 0) or 0,
-                cached_tokens=getattr(ptd, "cached_tokens", 0) if ptd else 0,
-                completion_tokens=getattr(u, "completion_tokens", 0) or 0,
-            )
-    except Exception as ex:
-        logger.error(f"Vision usage tracking failed: {ex}")
-
+    _track_response_usage(response, model)
     return response.choices[0].message.content.strip()
 
 
-# ═══════════════════════════════════════════════════════════════
-# ГЕНЕРАЦИЯ КОДА
-# ═══════════════════════════════════════════════════════════════
 def generate_code(prompt: str, language: str = "python") -> str:
     client = _get_client()
     model = os.getenv("MAIN_MODEL", "gpt-5-mini")
@@ -286,47 +274,14 @@ def generate_code(prompt: str, language: str = "python") -> str:
             {"role": "user", "content": prompt},
         ],
     )
-
-    try:
-        u = getattr(response, "usage", None)
-        if u:
-            from core.usage_tracker import record_usage
-            ptd = getattr(u, "prompt_tokens_details", None)
-            record_usage(
-                model=model,
-                prompt_tokens=getattr(u, "prompt_tokens", 0) or 0,
-                cached_tokens=getattr(ptd, "cached_tokens", 0) if ptd else 0,
-                completion_tokens=getattr(u, "completion_tokens", 0) or 0,
-            )
-    except Exception as ex:
-        logger.error(f"Code usage tracking failed: {ex}")
-
+    _track_response_usage(response, model)
     return response.choices[0].message.content
 
 
-# ═══════════════════════════════════════════════════════════════
-# ЭМБЕДДИНГИ
-# ═══════════════════════════════════════════════════════════════
 def embed_texts(texts: list) -> list:
     client = _get_client()
     model = os.getenv("EMBED_MODEL", "text-embedding-3-small")
 
-    response = client.embeddings.create(
-        model=model,
-        input=texts,
-    )
-
-    try:
-        u = getattr(response, "usage", None)
-        if u:
-            from core.usage_tracker import record_usage
-            record_usage(
-                model=model,
-                prompt_tokens=getattr(u, "prompt_tokens", 0) or 0,
-                cached_tokens=0,
-                completion_tokens=0,
-            )
-    except Exception as ex:
-        logger.error(f"Embedding usage tracking failed: {ex}")
-
+    response = client.embeddings.create(model=model, input=texts)
+    _track_response_usage(response, model, include_completion=False)
     return [item.embedding for item in response.data]
